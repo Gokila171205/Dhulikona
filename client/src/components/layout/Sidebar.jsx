@@ -35,9 +35,15 @@ const Sidebar = ({ isOpen, role = 'ADMIN' }) => {
       { name: 'Audit Logs', path: '/admin/audit-logs', icon: ShieldCheck },
     ],
     // Placeholders for other roles
-    OPERATOR: [
-      { name: 'Dashboard', path: '/operator', icon: LayoutDashboard },
-    ],
+   OPERATOR: [
+  { name: 'Dashboard', path: '/operator', icon: LayoutDashboard },
+  { name: 'Pumps', path: '/operator/pumps', icon: Wrench },
+  { name: 'Water Supply', path: '/operator/water-supply', icon: Droplet },
+  { name: 'Water Quality', path: '/operator/water-quality', icon: Activity },
+  { name: 'Complaints', path: '/operator/complaints', icon: FileWarning },
+  { name: 'Maintenance', path: '/operator/maintenance', icon: Settings },
+  { name: 'Charges', path: '/operator/charges', icon: CreditCard },
+],
     VILLAGER: [
       { name: 'Dashboard', path: '/villager', icon: LayoutDashboard },
     ]

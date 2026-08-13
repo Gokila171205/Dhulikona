@@ -1,6 +1,8 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import DashboardLayout from '../components/layout/DashboardLayout';
+import OperatorDashboard from '../pages/Operator/Dashboard';
+import OperatorPumps from '../pages/Operator/Pumps';
 
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard';
@@ -34,10 +36,10 @@ const AppRoutes = () => {
         <Route path="audit-logs" element={<Placeholder title="Audit Logs" />} />
       </Route>
 
-      {/* Operator Routes Placeholder */}
       <Route path="/operator" element={<DashboardLayout role="OPERATOR" />}>
-        <Route index element={<Placeholder title="Operator Dashboard" />} />
-      </Route>
+  <Route index element={<OperatorDashboard />} />
+  <Route path="pumps" element={<OperatorPumps />} />
+</Route>
 
       {/* Villager Routes Placeholder */}
       <Route path="/villager" element={<DashboardLayout role="VILLAGER" />}>
