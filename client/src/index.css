@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gov-blue: #0F265C;
+  --color-gov-light: #284E9C;
+  --color-water-blue: #0085CA;
+  --color-water-light: #4CB5F5;
+  --color-success: #166534;
+  --color-warning: #D97706;
+  --color-danger: #DC2626;
+  --color-background-default: #F3F4F6;
+  --color-background-paper: #FFFFFF;
+}
+
+body {
+  background-color: var(--color-background-default);
+  color: #1f2937;
+  font-family: 'Inter', 'Noto Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
