@@ -3,6 +3,11 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import OperatorDashboard from '../pages/Operator/Dashboard';
 import OperatorPumps from '../pages/Operator/Pumps';
+import WaterSupply from '../pages/Operator/WaterSupply';
+import WaterQuality from '../pages/Operator/WaterQuality';
+import Complaints from '../pages/Operator/Complaints';
+import Maintenance from '../pages/Operator/Maintenance';
+import Charges from '../pages/Operator/Charges';
 
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard';
@@ -35,10 +40,16 @@ const AppRoutes = () => {
         <Route path="notifications" element={<Placeholder title="System Notifications" />} />
         <Route path="audit-logs" element={<Placeholder title="Audit Logs" />} />
       </Route>
+// Operator Routes
 
       <Route path="/operator" element={<DashboardLayout role="OPERATOR" />}>
   <Route index element={<OperatorDashboard />} />
   <Route path="pumps" element={<OperatorPumps />} />
+  <Route path="water-supply" element={<WaterSupply />} />
+  <Route path="water-quality" element={<WaterQuality />} />
+  <Route path="complaints" element={<Complaints />} />
+  <Route path="maintenance" element={<Maintenance />} />
+  <Route path="charges" element={<Charges />} />
 </Route>
 
       {/* Villager Routes Placeholder */}
