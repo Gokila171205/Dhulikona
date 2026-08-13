@@ -4,6 +4,18 @@ import DashboardLayout from '../components/layout/DashboardLayout';
 
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard';
+import AdminUsers from '../pages/admin/Users';
+import AdminVillages from '../pages/admin/Villages';
+import AdminPumps from '../pages/admin/Pumps';
+import AdminWaterSupply from '../pages/admin/WaterSupply';
+import AdminWaterQuality from '../pages/admin/WaterQuality';
+import AdminComplaints from '../pages/admin/Complaints';
+import AdminMaintenance from '../pages/admin/Maintenance';
+import AdminPayments from '../pages/admin/Payments';
+import AdminAnalytics from '../pages/admin/Analytics';
+import AdminReports from '../pages/admin/Reports';
+import AdminNotifications from '../pages/admin/Notifications';
+import AdminAuditLogs from '../pages/admin/AuditLogs';
 
 // Placeholders for other pages
 const Placeholder = ({ title }) => (
@@ -20,18 +32,18 @@ const AppRoutes = () => {
       {/* Admin Routes */}
       <Route path="/admin" element={<DashboardLayout role="ADMIN" />}>
         <Route index element={<AdminDashboard />} />
-        <Route path="villages" element={<Placeholder title="Villages Management" />} />
-        <Route path="users" element={<Placeholder title="Users Management" />} />
-        <Route path="pumps" element={<Placeholder title="Pumps Management" />} />
-        <Route path="water-supply" element={<Placeholder title="Water Supply Logs" />} />
-        <Route path="water-quality" element={<Placeholder title="Water Quality Testing" />} />
-        <Route path="complaints" element={<Placeholder title="Complaints Tracking" />} />
-        <Route path="maintenance" element={<Placeholder title="Maintenance Scheduling" />} />
-        <Route path="payments" element={<Placeholder title="Payment Collection" />} />
-        <Route path="analytics" element={<Placeholder title="System Analytics" />} />
-        <Route path="reports" element={<Placeholder title="Generated Reports" />} />
-        <Route path="notifications" element={<Placeholder title="System Notifications" />} />
-        <Route path="audit-logs" element={<Placeholder title="Audit Logs" />} />
+        <Route path="villages" element={<AdminVillages />} />
+        <Route path="users" element={<AdminUsers />} />
+        <Route path="pumps" element={<AdminPumps />} />
+        <Route path="water-supply" element={<AdminWaterSupply />} />
+        <Route path="water-quality" element={<AdminWaterQuality />} />
+        <Route path="complaints" element={<AdminComplaints />} />
+        <Route path="maintenance" element={<AdminMaintenance />} />
+        <Route path="payments" element={<AdminPayments />} />
+        <Route path="analytics" element={<AdminAnalytics />} />
+        <Route path="reports" element={<AdminReports />} />
+        <Route path="notifications" element={<AdminNotifications />} />
+        <Route path="audit-logs" element={<AdminAuditLogs />} />
       </Route>
 
       {/* Operator Routes Placeholder */}

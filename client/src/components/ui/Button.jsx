@@ -12,7 +12,7 @@ const Button = ({ children, variant = 'primary', className = '', ...props }) => 
 
   return (
     <button 
-      className={`${baseStyles} ${variants[variant]} ${className}`}
+      className={`${baseStyles} ${variants[variant]} ${props.disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}
       {...props}
     >
       {children}
