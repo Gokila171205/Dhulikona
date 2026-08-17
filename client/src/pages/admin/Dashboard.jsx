@@ -26,8 +26,11 @@ const SkeletonChart = () => (
 
 const AdminDashboard = () => {
   const [analytics, setAnalytics] = useState(null);
+  const [recentComplaints, setRecentComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [complaintsLoading, setComplaintsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [complaintsError, setComplaintsError] = useState(null);
   const [retryTrigger, setRetryTrigger] = useState(0);
 
   useEffect(() => {
@@ -44,6 +47,22 @@ const AdminDashboard = () => {
       }
     };
     fetchAnalytics();
+  }, [retryTrigger]);
+
+  useEffect(() => {
+    const fetchRecentComplaints = async () => {
+      try {
+        setComplaintsLoading(true);
+        setComplaintsError(null);
+        const res = await api.get('/complaints', { params: { limit: 5 } });
+        setRecentComplaints(res.data);
+      } catch (err) {
+        setComplaintsError('Unable to load recent complaints.');
+      } finally {
+        setComplaintsLoading(false);
+      }
+    };
+    fetchRecentComplaints();
   }, [retryTrigger]);
 
   const complaintColumns = [
@@ -137,6 +156,41 @@ const AdminDashboard = () => {
     },
   ];
 
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return 'N/A';
+      const day = date.getDate().toString().padStart(2, '0');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[date.getMonth()];
+      const year = date.getFullYear();
+      let hours = date.getHours();
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      return `${day} ${month} ${year} · ${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    } catch (e) {
+      return 'N/A';
+    }
+  };
+
+  const formattedComplaints = recentComplaints.map(c => {
+    let displayStatus = c.status;
+    if (c.status === 'Submitted' || c.status === 'Verified') displayStatus = 'Pending';
+    if (c.status === 'Maintenance Started') displayStatus = 'In Progress';
+    if (c.status === 'Confirmed') displayStatus = 'Closed';
+
+    return {
+      id: c.id ? `${c.id.substring(0, 8)}...` : (c._id ? `${c._id.toString().substring(0, 8)}...` : 'N/A'),
+      village: c.villageName || c.village?.name || 'Not specified',
+      issue: c.title || 'Not specified',
+      status: displayStatus,
+      date: formatDateTime(c.createdAt)
+    };
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -228,22 +282,20 @@ const AdminDashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Placeholder for Complaints */}
-        <Card className="p-5 overflow-hidden flex flex-col relative bg-gray-50 border-dashed border-gray-300">
-          {(!loading && !analytics?.complaints?.available) && (
-            <div className="absolute inset-0 bg-white/50 z-10 flex flex-col items-center justify-center backdrop-blur-[1px]">
-              <Badge variant="default" className="mb-2">Coming Soon</Badge>
-              <p className="text-sm font-medium text-gray-600 text-center px-4">Complaint Management will be available in Phase 2.</p>
-            </div>
-          )}
-          <div className="flex items-center justify-between mb-4 opacity-30">
+        {/* Recent Complaints */}
+        <Card className="p-5 overflow-hidden flex flex-col relative bg-white border border-gray-200">
+          <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-800">Recent Complaints</h3>
           </div>
-          <div className="flex-1 overflow-auto opacity-30">
-            {loading ? (
+          <div className="flex-1 overflow-auto">
+            {complaintsLoading ? (
               <div className="h-32 bg-gray-200 animate-pulse rounded"></div>
+            ) : complaintsError ? (
+              <div className="text-center py-6 text-red-500 text-sm">
+                {complaintsError}
+              </div>
             ) : (
-              <Table columns={complaintColumns} data={[]} keyExtractor={(row) => row.id} />
+              <Table columns={complaintColumns} data={formattedComplaints} keyExtractor={(row) => row.id} />
             )}
           </div>
         </Card>

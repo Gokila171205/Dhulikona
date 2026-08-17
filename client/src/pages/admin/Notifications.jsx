@@ -8,25 +8,22 @@ import Table from '../../components/ui/Table';
 import Modal from '../../components/ui/Modal';
 import { 
   Bell, CheckCircle, Search, RefreshCw, AlertTriangle, Eye, Trash2, ShieldAlert,
-  Droplet, Settings, PenTool, CreditCard, Activity, Calendar, Info
+  Info
 } from 'lucide-react';
-import { 
-  mockNotifications, notificationTypes, priorityLevels, statusOptions 
-} from '../../data/mockNotifications';
 import api from '../../services/api';
+
+const typeOptions = ['info', 'warning', 'success'];
+const statusOptions = ['Read', 'Unread'];
 
 const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
-  const [villages, setVillages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   // Filters and Search
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [villageFilter, setVillageFilter] = useState('');
 
   // Modals state
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -35,23 +32,35 @@ const Notifications = () => {
   
   const [selectedNotification, setSelectedNotification] = useState(null);
 
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      const day = d.getDate().toString().padStart(2, '0');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[d.getMonth()];
+      const year = d.getFullYear();
+      let hours = d.getHours();
+      const minutes = d.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12; // the hour '0' should be '12'
+      return `${day} ${month} ${year} · ${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    } catch (e) {
+      return '';
+    }
+  };
+
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const [notifRes, villagesRes] = await Promise.all([
-        api.get('/notifications?limit=100'),
-        api.get('/villages?limit=100')
-      ]);
-      setVillages(villagesRes.data);
-      const mapped = notifRes.data.map(n => ({
+      const notifRes = await api.get('/notifications?limit=100');
+      const mapped = (notifRes.data || []).map(n => ({
         id: n._id.toString(),
         title: n.title,
         message: n.message,
-        type: n.type === 'danger' ? 'Complaint' : n.type === 'warning' ? 'Water Quality' : 'System',
-        priority: n.type === 'danger' ? 'High' : 'Medium',
+        type: n.type || 'info',
         status: n.isRead ? 'Read' : 'Unread',
-        village: 'All Villages',
-        date: n.createdAt ? n.createdAt.split('T')[0] : '',
         createdAt: n.createdAt
       }));
       setNotifications(mapped);
@@ -73,31 +82,24 @@ const Notifications = () => {
     const matchesSearch = 
       n.title.toLowerCase().includes(searchLower) || 
       n.id.toLowerCase().includes(searchLower) ||
-      n.message.toLowerCase().includes(searchLower) ||
-      n.village.toLowerCase().includes(searchLower);
+      n.message.toLowerCase().includes(searchLower);
     
     const matchesType = typeFilter ? n.type === typeFilter : true;
-    const matchesPriority = priorityFilter ? n.priority === priorityFilter : true;
     const matchesStatus = statusFilter ? n.status === statusFilter : true;
-    const matchesVillage = villageFilter ? n.village === villageFilter : true;
 
-    return matchesSearch && matchesType && matchesPriority && matchesStatus && matchesVillage;
+    return matchesSearch && matchesType && matchesStatus;
   });
 
   // Calculate Summaries
   const totalNotifications = notifications.length;
   const unreadCount = notifications.filter(n => n.status === 'Unread').length;
-  const criticalCount = notifications.filter(n => n.priority === 'Critical' && n.status === 'Unread').length;
-  const highPriorityCount = notifications.filter(n => n.priority === 'High' && n.status === 'Unread').length;
   const readCount = notifications.filter(n => n.status === 'Read').length;
 
   // Actions
   const handleClearFilters = () => {
     setSearchTerm('');
     setTypeFilter('');
-    setPriorityFilter('');
     setStatusFilter('');
-    setVillageFilter('');
   };
 
   const handleView = (notification) => {
@@ -141,44 +143,28 @@ const Notifications = () => {
     setIsDeleteModalOpen(true);
   };
 
-  // UI Helpers
-  const getPriorityBadgeVariant = (priority) => {
-    switch (priority) {
-      case 'Critical': return 'danger';
-      case 'High': return 'warning';
-      case 'Medium': return 'primary';
-      case 'Low': return 'default';
-      default: return 'default';
-    }
-  };
-
   const getTypeIcon = (type) => {
     switch(type) {
-      case 'Water Quality': return <Droplet size={14} className="text-blue-500" />;
-      case 'Pump': return <Settings size={14} className="text-gray-500" />;
-      case 'Maintenance': return <PenTool size={14} className="text-amber-500" />;
-      case 'Complaint': return <AlertTriangle size={14} className="text-red-500" />;
-      case 'Payment': return <CreditCard size={14} className="text-green-500" />;
-      case 'Water Supply': return <Droplet size={14} className="text-cyan-500" />;
-      case 'System': return <Activity size={14} className="text-purple-500" />;
+      case 'warning': return <AlertTriangle size={14} className="text-red-500" />;
+      case 'success': return <CheckCircle size={14} className="text-green-500" />;
+      case 'info': return <Info size={14} className="text-blue-500" />;
       default: return <Bell size={14} className="text-gray-500" />;
     }
   };
-
   const columns = [
     { 
       header: 'ID / Date', 
       render: (row) => (
         <div>
           <p className="font-semibold text-gray-800 text-xs">{row.id}</p>
-          <p className="text-[10px] text-gray-500">{new Date(row.createdDate).toLocaleDateString()}</p>
+          <p className="text-[10px] text-gray-500">{formatDateTime(row.createdAt)}</p>
         </div>
       )
     },
     { 
       header: 'Type', 
       render: (row) => (
-        <div className="flex items-center gap-1 text-sm font-medium text-gray-700">
+        <div className="flex items-center gap-1 text-sm font-medium text-gray-700 capitalize">
           {getTypeIcon(row.type)} {row.type}
         </div>
       )
@@ -190,15 +176,6 @@ const Notifications = () => {
           <p className={`font-semibold ${row.status === 'Unread' ? 'text-gray-900' : 'text-gray-600'}`}>{row.title}</p>
           <p className="text-xs text-gray-500 truncate mt-0.5">{row.message}</p>
         </div>
-      )
-    },
-    { header: 'Village', accessor: 'village' },
-    { 
-      header: 'Priority', 
-      render: (row) => (
-        <Badge variant={getPriorityBadgeVariant(row.priority)}>
-          {row.priority}
-        </Badge>
       )
     },
     { 
@@ -269,13 +246,11 @@ const Notifications = () => {
           <p className="text-[10px] font-semibold uppercase text-blue-600 mt-1">Unread</p>
         </Card>
         <Card className="p-4 bg-red-50 border-red-200 text-center flex flex-col justify-center items-center shadow-sm">
-          <h3 className="text-2xl font-bold text-red-700 flex items-center gap-1">
-            {criticalCount} {criticalCount > 0 && <ShieldAlert size={16} />}
-          </h3>
+          <h3 className="text-lg font-bold text-red-700">Not available</h3>
           <p className="text-[10px] font-semibold uppercase text-red-600 mt-1">Critical (Unread)</p>
         </Card>
         <Card className="p-4 bg-amber-50 border-amber-200 text-center flex flex-col justify-center items-center shadow-sm">
-          <h3 className="text-2xl font-bold text-amber-700">{highPriorityCount}</h3>
+          <h3 className="text-lg font-bold text-amber-700">Not available</h3>
           <p className="text-[10px] font-semibold uppercase text-amber-600 mt-1">High (Unread)</p>
         </Card>
         <Card className="p-4 bg-green-50 border-green-200 text-center flex flex-col justify-center items-center">
@@ -294,24 +269,26 @@ const Notifications = () => {
             </h3>
             
             <div className="flex-1 space-y-3 overflow-y-auto max-h-[500px] pr-1">
-              {notifications.filter(n => n.status === 'Unread' && (n.priority === 'Critical' || n.priority === 'High')).length === 0 ? (
+              {notifications.filter(n => n.status === 'Unread' && n.type === 'warning').length === 0 ? (
                 <div className="text-center py-6">
                   <CheckCircle size={32} className="text-green-300 mx-auto mb-2" />
                   <p className="text-sm font-medium text-gray-500">You're all caught up!</p>
-                  <p className="text-xs text-gray-400 mt-1">No critical or high priority alerts pending.</p>
+                  <p className="text-xs text-gray-400 mt-1">No warnings requiring attention.</p>
                 </div>
               ) : (
                 notifications
-                  .filter(n => n.status === 'Unread' && (n.priority === 'Critical' || n.priority === 'High'))
+                  .filter(n => n.status === 'Unread' && n.type === 'warning')
                   .map(n => (
                     <div 
                       key={n.id} 
-                      className={`p-3 rounded border shadow-sm hover:shadow cursor-pointer transition-shadow ${n.priority === 'Critical' ? 'bg-white border-red-200 border-l-4 border-l-red-500' : 'bg-white border-amber-200 border-l-4 border-l-amber-500'}`}
+                      className="p-3 rounded border shadow-sm hover:shadow cursor-pointer transition-shadow bg-white border-red-200 border-l-4 border-l-red-500"
                       onClick={() => handleView(n)}
                     >
                       <div className="flex justify-between items-start mb-1">
                         <span className="text-[10px] font-bold text-gray-500 uppercase">{n.type}</span>
-                        <span className="text-[10px] font-semibold text-gray-400">{new Date(n.createdDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        <span className="text-[10px] font-semibold text-gray-400">
+                          {new Date(n.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        </span>
                       </div>
                       <h4 className="text-sm font-bold text-gray-900 leading-tight mb-1">{n.title}</h4>
                       <p className="text-xs text-gray-500 line-clamp-2">{n.message}</p>
@@ -326,8 +303,8 @@ const Notifications = () => {
         <div className="lg:col-span-3 space-y-4">
           {/* Filters */}
           <Card className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
-              <div className="relative lg:col-span-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+              <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Search size={16} className="text-gray-400" />
                 </div>
@@ -340,15 +317,9 @@ const Notifications = () => {
               </div>
               
               <Select
-                options={[{ label: 'All Types', value: '' }, ...notificationTypes.map(t => ({ label: t, value: t }))]}
+                options={[{ label: 'All Types', value: '' }, ...typeOptions.map(t => ({ label: t, value: t }))]}
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-              />
-
-              <Select
-                options={[{ label: 'All Priorities', value: '' }, ...priorityLevels.map(p => ({ label: p, value: p }))]}
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
               />
               
               <Select
@@ -356,15 +327,9 @@ const Notifications = () => {
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               />
-
-              <Select
-                options={[{ label: 'All Villages', value: '' }, ...villages.map(v => ({ label: v.name, value: v.name }))]}
-                value={villageFilter}
-                onChange={(e) => setVillageFilter(e.target.value)}
-              />
             </div>
             
-            {(searchTerm || typeFilter || priorityFilter || statusFilter || villageFilter) && (
+            {(searchTerm || typeFilter || statusFilter) && (
               <div className="mt-4 flex justify-end">
                 <button 
                   onClick={handleClearFilters}
@@ -403,15 +368,12 @@ const Notifications = () => {
             {/* Header Area */}
             <div className="flex flex-col md:flex-row justify-between items-start gap-4">
               <div className="flex gap-3 items-start">
-                <div className={`mt-1 p-2 rounded-full ${selectedNotification.priority === 'Critical' ? 'bg-red-100 text-red-600' : selectedNotification.priority === 'High' ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'}`}>
+                <div className="mt-1 p-2 rounded-full bg-blue-100 text-blue-600">
                   {getTypeIcon(selectedNotification.type)}
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 leading-tight">{selectedNotification.title}</h3>
                   <div className="flex items-center gap-3 mt-2 text-sm">
-                    <Badge variant={getPriorityBadgeVariant(selectedNotification.priority)}>
-                      {selectedNotification.priority} Priority
-                    </Badge>
                     <span className={`font-bold uppercase text-[10px] ${selectedNotification.status === 'Unread' ? 'text-gov-blue' : 'text-gray-400'}`}>
                       {selectedNotification.status}
                     </span>
@@ -433,28 +395,13 @@ const Notifications = () => {
               </div>
               <div className="flex flex-col border-b border-dashed pb-1">
                 <span className="text-gray-500 flex items-center gap-1 mb-1"><Info size={14} /> Type</span>
-                <span className="font-medium text-gray-900">{selectedNotification.type}</span>
+                <span className="font-medium text-gray-900 capitalize">{selectedNotification.type}</span>
               </div>
               <div className="flex flex-col border-b border-dashed pb-1">
-                <span className="text-gray-500 flex items-center gap-1 mb-1"><Calendar size={14} /> Generated On</span>
-                <span className="font-medium text-gray-900">{new Date(selectedNotification.createdDate).toLocaleString()}</span>
-              </div>
-              <div className="flex flex-col border-b border-dashed pb-1">
-                <span className="text-gray-500 flex items-center gap-1 mb-1"><Activity size={14} /> Created By</span>
-                <span className="font-medium text-gray-900">{selectedNotification.createdBy}</span>
+                <span className="text-gray-500 flex items-center gap-1 mb-1"><Info size={14} /> Generated On</span>
+                <span className="font-medium text-gray-900">{formatDateTime(selectedNotification.createdAt)}</span>
               </div>
             </div>
-
-            {/* Related Entity Reference */}
-            {selectedNotification.relatedId && (
-              <div className="bg-blue-50 border border-blue-100 rounded p-3 flex justify-between items-center mt-2">
-                <div>
-                  <p className="text-xs text-blue-600 font-bold uppercase mb-0.5">Related Record</p>
-                  <p className="text-sm font-medium text-blue-900">{selectedNotification.relatedType.toUpperCase()} : {selectedNotification.relatedId}</p>
-                </div>
-                <Button size="sm" variant="outline" className="bg-white">Go to Record</Button>
-              </div>
-            )}
             
             <div className="pt-4 flex justify-between items-center border-t border-gray-100">
               <Button 
@@ -516,4 +463,4 @@ const Notifications = () => {
   );
 };
 
-export default Notifications;
+export default Notifications;;

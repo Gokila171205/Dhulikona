@@ -1,10 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Menu, UserCircle, Wifi, WifiOff } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import api from '../../services/api';
 
 const Header = ({ toggleSidebar }) => {
   const { user } = useAuth();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return;
+    const fetchUnread = async () => {
+      try {
+        const notifRes = await api.get('/notifications?limit=100');
+        const count = (notifRes.data || []).filter(n => !n.isRead).length;
+        setUnreadCount(count);
+      } catch (err) {
+        console.error('Failed to fetch unread notifications count:', err);
+      }
+    };
+    fetchUnread();
+
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -46,7 +65,9 @@ const Header = ({ toggleSidebar }) => {
         <div className="flex items-center gap-4">
           <button className="p-2 rounded-full hover:bg-gov-light transition-colors relative">
             <Bell size={20} />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full"></span>
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-warning rounded-full"></span>
+            )}
           </button>
           <div className="flex items-center gap-2 cursor-pointer hover:bg-gov-light p-2 rounded-md transition-colors">
             <UserCircle size={24} />
