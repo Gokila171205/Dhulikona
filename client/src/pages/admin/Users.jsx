@@ -6,13 +6,15 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
 import Modal from '../../components/ui/Modal';
-import { Search, Plus, Edit2, AlertCircle, Eye } from 'lucide-react';
-import { mockUsers, villagesList } from '../../data/mockUsers';
+import { Search, Plus, Edit2, AlertCircle, Eye, CheckCircle } from 'lucide-react';
+import api from '../../services/api';
 
 const Users = () => {
   const [users, setUsers] = useState([]);
+  const [villagesList, setVillagesList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [successMsg, setSuccessMsg] = useState(null);
 
   // Filters and Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -20,71 +22,107 @@ const Users = () => {
   const [villageFilter, setVillageFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const limit = 10;
+
   // Modals state
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   
+  const [formError, setFormError] = useState(null);
+
   // Form State
   const [formData, setFormData] = useState({
+    userId: '',
     name: '',
     phone: '',
-    role: 'VILLAGER',
-    village: 'All'
+    role: 'villager',
+    village: ''
   });
 
-  // Fetch users (mock API call)
+  // Fetch Data
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [usersRes, villagesRes] = await Promise.all([
+        api.get('/users', {
+          params: {
+            search: searchTerm,
+            role: roleFilter,
+            village: villageFilter,
+            status: statusFilter,
+            page,
+            limit
+          }
+        }),
+        api.get('/villages', { params: { limit: 100 } })
+      ]);
+      setUsers(usersRes.data);
+      setTotalPages(usersRes.pagination?.totalPages || 1);
+      setTotalUsers(usersRes.pagination?.total || 0);
+      setVillagesList(villagesRes.data);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch users. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reset page to 1 when filters change to prevent empty states
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 600));
-        setUsers(mockUsers);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch users. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchUsers();
-  }, []);
+    setPage(1);
+  }, [searchTerm, roleFilter, villageFilter, statusFilter]);
 
-  // Filtered Users
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      user.phone.includes(searchTerm) ||
-      user.id.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesRole = roleFilter ? user.role === roleFilter : true;
-    const matchesVillage = villageFilter ? user.village === villageFilter : true;
-    
-    let matchesStatus = true;
-    if (statusFilter === 'Active') matchesStatus = user.isActive === true;
-    if (statusFilter === 'Inactive') matchesStatus = user.isActive === false;
+  useEffect(() => {
+    // Add simple debounce for search
+    const timer = setTimeout(() => {
+      fetchData();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm, roleFilter, villageFilter, statusFilter, page]);
 
-    return matchesSearch && matchesRole && matchesVillage && matchesStatus;
-  });
+  // Frontend filter is no longer needed since the API does it, but we can keep it as passthrough
+  const filteredUsers = users;
 
   // Handlers
   const handleOpenAddModal = () => {
     setSelectedUser(null);
-    setFormData({ name: '', phone: '', role: 'VILLAGER', village: 'All' });
+    setFormData({ userId: '', name: '', phone: '', role: 'villager', village: '' });
+    setFormError(null);
     setIsFormModalOpen(true);
   };
 
   const handleOpenEditModal = (user) => {
     setSelectedUser(user);
-    setFormData({ name: user.name, phone: user.phone, role: user.role, village: user.village });
+    setFormData({
+      userId: user.userId || '',
+      name: user.name,
+      phone: user.phone,
+      role: user.role,
+      village: user.village?._id || user.village || ''
+    });
+    setFormError(null);
     setIsFormModalOpen(true);
   };
 
-  const handleOpenViewModal = (user) => {
-    setSelectedUser(user);
-    setIsViewModalOpen(true);
+  const handleOpenViewModal = async (user) => {
+    try {
+      setLoading(true);
+      const res = await api.get(`/users/${user._id || user.id}`);
+      setSelectedUser(res.data);
+      setIsViewModalOpen(true);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to fetch user details.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleOpenStatusConfirm = (user) => {
@@ -92,55 +130,83 @@ const Users = () => {
     setIsConfirmModalOpen(true);
   };
 
-  const handleFormSubmit = (e) => {
-    e.preventDefault();
-    if (selectedUser) {
-      // Edit User
-      setUsers(users.map(u => u.id === selectedUser.id ? { ...u, ...formData } : u));
-    } else {
-      // Add User
-      const newUser = {
-        id: `USR-${1000 + users.length + 1}`,
-        ...formData,
-        isActive: true,
-        createdAt: new Date().toISOString().split('T')[0]
-      };
-      setUsers([newUser, ...users]);
-    }
-    setIsFormModalOpen(false);
+  const showSuccess = (msg) => {
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(null), 3000);
   };
 
-  const handleToggleStatus = () => {
-    setUsers(users.map(u => 
-      u.id === selectedUser.id ? { ...u, isActive: !u.isActive } : u
-    ));
-    setIsConfirmModalOpen(false);
+  const handleFormSubmit = async (e) => {
+    e.preventDefault();
+    setFormError(null);
+    setIsSaving(true);
+    try {
+      if (selectedUser) {
+        // Edit User
+        await api.put(`/users/${selectedUser._id || selectedUser.id}`, formData);
+        showSuccess('User updated successfully!');
+      } else {
+        // Add User
+        // Need a random password for new user in API, so we provide one
+        await api.post('/users', { ...formData, password: 'password123' });
+        showSuccess('User created successfully!');
+      }
+      setIsFormModalOpen(false);
+      fetchData(page); // Refresh data
+    } catch (err) {
+      setFormError(err.response?.data?.message || 'Failed to save user.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleStatus = async () => {
+    setIsSaving(true);
+    try {
+      await api.patch(`/users/${selectedUser._id || selectedUser.id}/status`, {
+        status: selectedUser.status === 'active' ? 'inactive' : 'active'
+      });
+      showSuccess(`User ${selectedUser.status === 'active' ? 'deactivated' : 'activated'} successfully!`);
+      setIsConfirmModalOpen(false);
+      fetchData(page); // Refresh data
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to change status.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const columns = [
-    { header: 'User ID', accessor: 'id' },
+    { header: 'User ID', accessor: 'userId' },
     { header: 'Name', accessor: 'name' },
     { header: 'Phone', accessor: 'phone' },
     { 
       header: 'Role', 
       accessor: 'role',
       render: (row) => (
-        <Badge variant={row.role === 'ADMIN' ? 'primary' : row.role === 'OPERATOR' ? 'warning' : 'default'}>
-          {row.role}
+        <Badge variant={row.role === 'admin' ? 'primary' : row.role === 'operator' ? 'warning' : 'default'}>
+          {row.role.toUpperCase()}
         </Badge>
       )
     },
-    { header: 'Village', accessor: 'village' },
+    { 
+      header: 'Village', 
+      accessor: 'village',
+      render: (row) => row.village?.name || 'N/A'
+    },
     { 
       header: 'Status', 
-      accessor: 'isActive',
+      accessor: 'status',
       render: (row) => (
-        <Badge variant={row.isActive ? 'success' : 'danger'}>
-          {row.isActive ? 'Active' : 'Inactive'}
+        <Badge variant={row.status === 'active' ? 'success' : 'danger'}>
+          {row.status === 'active' ? 'Active' : 'Inactive'}
         </Badge>
       )
     },
-    { header: 'Joined', accessor: 'createdAt' },
+    { 
+      header: 'Joined', 
+      accessor: 'createdAt',
+      render: (row) => new Date(row.createdAt).toLocaleDateString()
+    },
     {
       header: 'Actions',
       render: (row) => (
@@ -153,9 +219,9 @@ const Users = () => {
           </button>
           <button 
             onClick={() => handleOpenStatusConfirm(row)} 
-            className={`${row.isActive ? 'text-red-500 hover:text-red-700' : 'text-green-500 hover:text-green-700'} text-xs font-medium border px-2 py-1 rounded`}
+            className={`${row.status === 'active' ? 'text-red-500 hover:text-red-700' : 'text-green-500 hover:text-green-700'} text-xs font-medium border px-2 py-1 rounded`}
           >
-            {row.isActive ? 'Deactivate' : 'Activate'}
+            {row.status === 'active' ? 'Deactivate' : 'Activate'}
           </button>
         </div>
       )
@@ -173,9 +239,13 @@ const Users = () => {
 
   if (error) {
     return (
-      <div className="p-4 bg-red-50 text-red-700 rounded-md flex items-center gap-2">
-        <AlertCircle size={20} />
-        <span>{error}</span>
+      <div className="p-6 text-center max-w-md mx-auto bg-red-50 text-red-700 rounded-lg border border-red-200 mt-10 space-y-4">
+        <AlertCircle className="mx-auto text-red-500" size={48} />
+        <h3 className="text-lg font-bold">Error</h3>
+        <p className="text-sm">{error}</p>
+        <Button variant="primary" onClick={() => fetchData(page)}>
+          Retry Loading
+        </Button>
       </div>
     );
   }
@@ -192,6 +262,13 @@ const Users = () => {
           <Plus size={18} /> Add New User
         </Button>
       </div>
+
+      {successMsg && (
+        <div className="p-4 bg-green-50 text-green-700 rounded-md flex items-center gap-2 border border-green-100 transition-all">
+          <CheckCircle size={20} />
+          <span>{successMsg}</span>
+        </div>
+      )}
 
       {/* Filters and Search */}
       <Card className="p-4">
@@ -211,9 +288,9 @@ const Users = () => {
           <Select
             options={[
               { label: 'All Roles', value: '' },
-              { label: 'Villager', value: 'VILLAGER' },
-              { label: 'Operator', value: 'OPERATOR' },
-              { label: 'Admin', value: 'ADMIN' },
+              { label: 'Villager', value: 'villager' },
+              { label: 'Operator', value: 'operator' },
+              { label: 'Admin', value: 'admin' },
             ]}
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value)}
@@ -222,7 +299,7 @@ const Users = () => {
           <Select
             options={[
               { label: 'All Villages', value: '' },
-              ...villagesList.map(v => ({ label: v, value: v }))
+              ...villagesList.map(v => ({ label: v.name, value: v._id }))
             ]}
             value={villageFilter}
             onChange={(e) => setVillageFilter(e.target.value)}
@@ -231,8 +308,8 @@ const Users = () => {
           <Select
             options={[
               { label: 'All Statuses', value: '' },
-              { label: 'Active', value: 'Active' },
-              { label: 'Inactive', value: 'Inactive' },
+              { label: 'Active', value: 'active' },
+              { label: 'Inactive', value: 'inactive' },
             ]}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -243,7 +320,41 @@ const Users = () => {
       {/* Users Table */}
       <Card className="overflow-hidden">
         {/* Responsive Table wrapper handles empty states internally based on data length */}
-        <Table columns={columns} data={filteredUsers} keyExtractor={row => row.id} />
+        <Table columns={columns} data={filteredUsers} keyExtractor={row => row._id || row.id} />
+        
+        {/* Pagination Controls */}
+        {totalUsers > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-gray-50 border-t border-gray-150">
+            <div className="text-sm text-gray-500">
+              Showing <span className="font-medium">{(page - 1) * limit + 1}</span> to{' '}
+              <span className="font-medium">{Math.min(page * limit, totalUsers)}</span> of{' '}
+              <span className="font-medium">{totalUsers}</span> users
+            </div>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="!px-3 !py-1.5 text-sm bg-white"
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-gray-600 font-medium px-2">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="!px-3 !py-1.5 text-sm bg-white"
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Form Modal (Add/Edit) */}
@@ -253,6 +364,19 @@ const Users = () => {
         title={selectedUser ? 'Edit User' : 'Add New User'}
       >
         <form onSubmit={handleFormSubmit} className="space-y-4">
+          {formError && (
+            <div className="p-3 bg-red-50 text-red-700 text-sm rounded border border-red-200">
+              {formError}
+            </div>
+          )}
+          <Input 
+            label="User ID" 
+            required 
+            disabled={!!selectedUser}
+            value={formData.userId}
+            onChange={(e) => setFormData({...formData, userId: e.target.value})}
+            placeholder="e.g. U-VIL-003"
+          />
           <Input 
             label="Full Name" 
             required 
@@ -271,23 +395,27 @@ const Users = () => {
             label="Role" 
             required
             options={[
-              { label: 'Villager', value: 'VILLAGER' },
-              { label: 'Operator', value: 'OPERATOR' },
-              { label: 'Admin', value: 'ADMIN' },
+              { label: 'Villager', value: 'villager' },
+              { label: 'Operator', value: 'operator' },
+              { label: 'Admin', value: 'admin' },
             ]}
             value={formData.role}
             onChange={(e) => setFormData({...formData, role: e.target.value})}
           />
           <Select 
-            label="Village" 
-            required
-            options={villagesList.map(v => ({ label: v, value: v }))}
-            value={formData.village}
+            label="Village (Optional for Admins)" 
+            options={[
+              { label: 'Select Village', value: '' },
+              ...villagesList.map(v => ({ label: v.name, value: v._id }))
+            ]}
+            value={formData.village || ''}
             onChange={(e) => setFormData({...formData, village: e.target.value})}
           />
           <div className="pt-4 flex justify-end gap-3 border-t">
             <Button variant="outline" type="button" onClick={() => setIsFormModalOpen(false)}>Cancel</Button>
-            <Button type="submit">{selectedUser ? 'Save Changes' : 'Add User'}</Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save'}
+            </Button>
           </div>
         </form>
       </Modal>
@@ -296,25 +424,21 @@ const Users = () => {
       <Modal 
         isOpen={isConfirmModalOpen} 
         onClose={() => setIsConfirmModalOpen(false)}
-        title="Confirm Action"
+        title="Confirm Status Change"
       >
         <div className="space-y-4">
-          <div className="flex items-start gap-3 p-3 bg-warning/10 text-warning rounded-md">
-            <AlertCircle className="flex-shrink-0 mt-0.5" />
-            <p className="text-sm">
-              Are you sure you want to <strong>{selectedUser?.isActive ? 'deactivate' : 'activate'}</strong> the account for <strong>{selectedUser?.name}</strong>?
-            </p>
-          </div>
-          <p className="text-sm text-gray-600">
-            {selectedUser?.isActive 
-              ? "Deactivating this account will prevent the user from logging in to the system. You can reactivate it later."
-              : "Activating this account will allow the user to log in and access the system normally."
-            }
+          <p className="text-gray-600 text-sm">
+            Are you sure you want to {selectedUser?.status === 'active' ? 'deactivate' : 'activate'}{' '}
+            <span className="font-semibold text-gray-800">{selectedUser?.name}</span>?
           </p>
           <div className="pt-4 flex justify-end gap-3 border-t">
             <Button variant="outline" onClick={() => setIsConfirmModalOpen(false)}>Cancel</Button>
-            <Button variant={selectedUser?.isActive ? 'danger' : 'primary'} onClick={handleToggleStatus}>
-              Yes, {selectedUser?.isActive ? 'Deactivate' : 'Activate'}
+            <Button 
+              variant="danger" 
+              onClick={handleToggleStatus}
+              disabled={isSaving}
+            >
+              {isSaving ? 'Processing...' : (selectedUser?.status === 'active' ? 'Deactivate' : 'Activate')}
             </Button>
           </div>
         </div>
@@ -330,7 +454,7 @@ const Users = () => {
           <div className="space-y-4">
             <div className="flex justify-between items-center border-b pb-2">
               <span className="text-gray-500 text-sm">User ID</span>
-              <span className="font-medium text-gray-900">{selectedUser.id}</span>
+              <span className="font-medium text-gray-900">{selectedUser.userId}</span>
             </div>
             <div className="flex justify-between items-center border-b pb-2">
               <span className="text-gray-500 text-sm">Name</span>
@@ -342,23 +466,23 @@ const Users = () => {
             </div>
             <div className="flex justify-between items-center border-b pb-2">
               <span className="text-gray-500 text-sm">Role</span>
-              <Badge variant={selectedUser.role === 'ADMIN' ? 'primary' : selectedUser.role === 'OPERATOR' ? 'warning' : 'default'}>
-                {selectedUser.role}
+              <Badge variant={selectedUser.role === 'admin' ? 'primary' : selectedUser.role === 'operator' ? 'warning' : 'default'}>
+                {selectedUser.role.toUpperCase()}
               </Badge>
             </div>
             <div className="flex justify-between items-center border-b pb-2">
               <span className="text-gray-500 text-sm">Assigned Village</span>
-              <span className="font-medium text-gray-900">{selectedUser.village}</span>
+              <span className="font-medium text-gray-900">{selectedUser.village?.name || 'N/A'}</span>
             </div>
             <div className="flex justify-between items-center border-b pb-2">
               <span className="text-gray-500 text-sm">Status</span>
-              <Badge variant={selectedUser.isActive ? 'success' : 'danger'}>
-                {selectedUser.isActive ? 'Active' : 'Inactive'}
+              <Badge variant={selectedUser.status === 'active' ? 'success' : 'danger'}>
+                {selectedUser.status === 'active' ? 'Active' : 'Inactive'}
               </Badge>
             </div>
             <div className="flex justify-between items-center pb-2">
               <span className="text-gray-500 text-sm">Joined Date</span>
-              <span className="font-medium text-gray-900">{selectedUser.createdAt}</span>
+              <span className="font-medium text-gray-900">{new Date(selectedUser.createdAt).toLocaleDateString()}</span>
             </div>
             
             <div className="pt-4 flex justify-end border-t">

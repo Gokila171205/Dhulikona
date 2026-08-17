@@ -18,15 +18,18 @@ const Table = ({ columns, data, keyExtractor }) => {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {data.map((row, rowIndex) => (
-            <tr key={keyExtractor ? keyExtractor(row) : rowIndex} className="hover:bg-gray-50 transition-colors">
-              {columns.map((col, colIndex) => (
-                <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                  {col.render ? col.render(row) : row[col.accessor]}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {data.map((row, rowIndex) => {
+            const rowKey = (keyExtractor ? keyExtractor(row) : null) || row._id || row.id || rowIndex;
+            return (
+              <tr key={rowKey} className="hover:bg-gray-50 transition-colors">
+                {columns.map((col, colIndex) => (
+                  <td key={colIndex} className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                    {col.render ? col.render(row) : row[col.accessor]}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       {data.length === 0 && (

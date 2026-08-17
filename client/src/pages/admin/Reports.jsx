@@ -7,12 +7,14 @@ import Table from '../../components/ui/Table';
 import { 
   FileText, Download, Printer, RefreshCw, AlertCircle, FileOutput, CheckCircle, Search, Calendar, MapPin
 } from 'lucide-react';
-import { 
-  mockReportsHistory, reportTypes, dateRangeOptions, getMockReportPreviewData 
-} from '../../data/mockReports';
-import { villagesList } from '../../data/mockUsers';
-import { districtsList } from '../../data/mockAnalytics';
-import { operatorsList } from '../../data/mockVillages';
+import api from '../../services/api';
+
+const reportTypesList = [
+  'Overall System Summary',
+  'User Report',
+  'Village Report',
+  'System Activity / Audit Report'
+];
 
 const Reports = () => {
   const [history, setHistory] = useState([]);
@@ -20,65 +22,227 @@ const Reports = () => {
   const [error, setError] = useState(null);
 
   // Filters for generating a report
-  const [selectedReportType, setSelectedReportType] = useState(reportTypes[0]);
-  const [dateRange, setDateRange] = useState(dateRangeOptions[1]);
+  const [selectedReportType, setSelectedReportType] = useState(reportTypesList[0]);
+  
+  // Dynamic filter state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [moduleFilter, setModuleFilter] = useState('');
+  const [actionFilter, setActionFilter] = useState('');
+  const [resultFilter, setResultFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState(''); // YYYY-MM-DD
   const [villageFilter, setVillageFilter] = useState('');
   const [districtFilter, setDistrictFilter] = useState('');
-  const [operatorFilter, setOperatorFilter] = useState('');
+
+  // Pagination for report preview
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const limit = 10;
+
+  // Dropdown lookup lists
+  const [villagesList, setVillagesList] = useState([]);
+  const [districtsList, setDistrictsList] = useState([]);
   
   // Preview State
   const [previewData, setPreviewData] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
-    const fetchHistory = async () => {
+    const fetchInitialData = async () => {
       try {
         setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 600));
-        setHistory(mockReportsHistory);
+        // Initialize empty report history log
+        setHistory([]);
+        
+        // Fetch lookup lists for dropdowns
+        const villagesRes = await api.get('/villages', { params: { limit: 100 } });
+        
+        const vList = villagesRes.data.map(v => v.name);
+        const uniqueDistricts = [...new Set(villagesRes.data.map(v => v.district))];
+
+        setVillagesList(vList);
+        setDistrictsList(uniqueDistricts);
         setError(null);
       } catch (err) {
-        setError('Failed to fetch reports history.');
+        setError('Failed to fetch filter data.');
       } finally {
         setLoading(false);
       }
     };
-    fetchHistory();
+    fetchInitialData();
   }, []);
 
+  // Reset pagination when filter values or report type change
+  useEffect(() => {
+    setPage(1);
+    setPreviewData(null);
+  }, [
+    selectedReportType, searchTerm, statusFilter, roleFilter, moduleFilter,
+    actionFilter, resultFilter, dateFilter, villageFilter, districtFilter
+  ]);
+
   const handleClearFilters = () => {
-    setSelectedReportType(reportTypes[0]);
-    setDateRange(dateRangeOptions[1]);
+    setSelectedReportType(reportTypesList[0]);
+    setSearchTerm('');
+    setStatusFilter('');
+    setRoleFilter('');
+    setModuleFilter('');
+    setActionFilter('');
+    setResultFilter('');
+    setDateFilter('');
     setVillageFilter('');
     setDistrictFilter('');
-    setOperatorFilter('');
     setPreviewData(null);
   };
 
-  const handleGenerateReport = () => {
+  const handleGenerateReport = async (targetPage = 1) => {
     setIsGenerating(true);
-    setPreviewData(null);
+    setError(null);
     
-    // Simulate generation time
-    setTimeout(() => {
-      const data = getMockReportPreviewData(selectedReportType, villageFilter || 'All Villages', dateRange);
-      setPreviewData(data);
-      setIsGenerating(false);
+    try {
+      let endpoint = '';
+      const params = {
+        page: targetPage,
+        limit
+      };
       
-      // Optionally add to history
+      if (selectedReportType === 'Overall System Summary') {
+        endpoint = '/reports/summary';
+      } else if (selectedReportType === 'User Report') {
+        endpoint = '/reports/users';
+        if (searchTerm) params.search = searchTerm;
+        if (roleFilter) params.role = roleFilter.toLowerCase();
+        if (statusFilter) params.status = statusFilter;
+        if (villageFilter) params.village = villageFilter;
+      } else if (selectedReportType === 'Village Report') {
+        endpoint = '/reports/villages';
+        if (searchTerm) params.search = searchTerm;
+        if (districtFilter) params.district = districtFilter;
+        if (statusFilter) params.status = statusFilter;
+      } else if (selectedReportType === 'System Activity / Audit Report') {
+        endpoint = '/reports/activity';
+        if (searchTerm) params.search = searchTerm;
+        if (moduleFilter) params.module = moduleFilter.toUpperCase().replace(' ', '_');
+        if (actionFilter) params.action = actionFilter.toUpperCase().replace(' ', '_');
+        if (roleFilter) params.role = roleFilter.toLowerCase();
+        if (resultFilter) params.result = resultFilter === 'Success' ? 'SUCCESS' : 'FAILED';
+        if (villageFilter) params.village = villageFilter;
+        if (dateFilter) params.date = dateFilter;
+      }
+
+      const res = await api.get(endpoint, { params });
+      
+      let formatted = null;
+      if (selectedReportType === 'Overall System Summary') {
+        const d = res.data;
+        formatted = {
+          summary: { 
+            TotalUsers: d.users.total, 
+            TotalVillages: d.villages.total, 
+            TotalHouseholds: d.households.total,
+            TotalAuditLogs: d.activity.total
+          },
+          columns: ['Metric', 'Total Count', 'Status'],
+          data: [
+            { Metric: 'Registered Users', Count: d.users.total, Status: 'Available' },
+            { Metric: 'Managed Villages', Count: d.villages.total, Status: 'Available' },
+            { Metric: 'Total Households', Count: d.households.total, Status: 'Available' },
+            { Metric: 'Audit Logs Recorded', Count: d.activity.total, Status: 'Available' },
+            { Metric: 'Water Pumps', Count: 'N/A', Status: 'Not yet available' },
+            { Metric: 'Complaints', Count: 'N/A', Status: 'Not yet available' },
+            { Metric: 'Water Supply Performance', Count: 'N/A', Status: 'Not yet available' },
+            { Metric: 'Water Quality Tests', Count: 'N/A', Status: 'Not yet available' },
+            { Metric: 'Fee Collections', Count: 'N/A', Status: 'Not yet available' }
+          ]
+        };
+        setTotalPages(1);
+        setTotalRecords(9);
+      } else if (selectedReportType === 'User Report') {
+        formatted = {
+          summary: { TotalUsers: res.pagination?.total || 0 },
+          columns: ['User ID', 'Name', 'Phone', 'Role', 'Village', 'Status', 'Registration Date'],
+          data: res.data.map(u => ({
+            'User ID': u.userId,
+            Name: u.name,
+            Phone: u.phone,
+            Role: u.role.toUpperCase(),
+            Village: u.village?.name || 'N/A',
+            Status: u.status.toUpperCase(),
+            'Registration Date': new Date(u.createdAt).toLocaleDateString()
+          }))
+        };
+        setPage(res.pagination?.page || 1);
+        setTotalPages(res.pagination?.totalPages || 1);
+        setTotalRecords(res.pagination?.total || 0);
+      } else if (selectedReportType === 'Village Report') {
+        formatted = {
+          summary: { TotalVillages: res.pagination?.total || 0 },
+          columns: ['Village ID', 'Village Name', 'District', 'Block', 'Households', 'Assigned Operator', 'Status', 'Created Date'],
+          data: res.data.map(v => ({
+            'Village ID': v.villageId,
+            'Village Name': v.name,
+            District: v.district,
+            Block: v.block,
+            Households: v.households,
+            'Assigned Operator': v.assignedOperator?.name || 'None',
+            Status: v.status.toUpperCase(),
+            'Created Date': new Date(v.createdAt).toLocaleDateString()
+          }))
+        };
+        setPage(res.pagination?.page || 1);
+        setTotalPages(res.pagination?.totalPages || 1);
+        setTotalRecords(res.pagination?.total || 0);
+      } else if (selectedReportType === 'System Activity / Audit Report') {
+        formatted = {
+          summary: { TotalActivities: res.pagination?.total || 0 },
+          columns: ['Log ID', 'Date/Time', 'User', 'Role', 'Action', 'Module', 'Village', 'Description', 'Result'],
+          data: res.data.map(log => ({
+            'Log ID': log.logId,
+            'Date/Time': new Date(log.createdAt).toLocaleString(),
+            User: log.userName || log.userId?.name || 'System',
+            Role: (log.role || log.userId?.role || 'system').toUpperCase(),
+            Action: log.action,
+            Module: log.module,
+            Village: log.village || 'N/A',
+            Description: log.description,
+            Result: log.result
+          }))
+        };
+        setPage(res.pagination?.page || 1);
+        setTotalPages(res.pagination?.totalPages || 1);
+        setTotalRecords(res.pagination?.total || 0);
+      }
+
+      setPreviewData(formatted);
+
+      // Save record in local history
       const newHistoryRecord = {
         id: `RPT-00${history.length + 1}`,
         reportType: selectedReportType,
         generatedDate: new Date().toISOString(),
         generatedBy: 'Admin User',
-        dateRange: dateRange,
-        village: villageFilter || 'All Villages',
-        district: districtFilter || 'All Districts',
+        filters: JSON.stringify({
+          searchTerm,
+          statusFilter,
+          roleFilter,
+          moduleFilter,
+          actionFilter,
+          resultFilter,
+          dateFilter,
+          villageFilter,
+          districtFilter
+        }),
         status: 'Completed'
       };
-      setHistory([newHistoryRecord, ...history]);
-    }, 1000);
+      setHistory(h => [newHistoryRecord, ...h]);
+
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to generate report.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handlePrint = () => {
@@ -115,8 +279,27 @@ const Reports = () => {
     { header: 'Type', accessor: 'reportType' },
     { header: 'Date Generated', render: (row) => new Date(row.generatedDate).toLocaleString() },
     { header: 'Generated By', accessor: 'generatedBy' },
-    { header: 'Date Range', accessor: 'dateRange' },
-    { header: 'Village Scope', accessor: 'village' },
+    { 
+      header: 'Selected Filters', 
+      render: (row) => {
+        try {
+          const f = JSON.parse(row.filters);
+          const parts = [];
+          if (f.searchTerm) parts.push(`Search: "${f.searchTerm}"`);
+          if (f.roleFilter) parts.push(`Role: ${f.roleFilter}`);
+          if (f.statusFilter) parts.push(`Status: ${f.statusFilter}`);
+          if (f.villageFilter) parts.push(`Village: ${f.villageFilter}`);
+          if (f.districtFilter) parts.push(`District: ${f.districtFilter}`);
+          if (f.moduleFilter) parts.push(`Module: ${f.moduleFilter}`);
+          if (f.actionFilter) parts.push(`Action: ${f.actionFilter}`);
+          if (f.resultFilter) parts.push(`Result: ${f.resultFilter}`);
+          if (f.dateFilter) parts.push(`Date: ${f.dateFilter}`);
+          return parts.length > 0 ? parts.join(', ') : 'None';
+        } catch (e) {
+          return 'None';
+        }
+      } 
+    },
     { 
       header: 'Status', 
       render: (row) => (
@@ -132,13 +315,26 @@ const Reports = () => {
           <button 
             className="text-gov-blue hover:underline text-sm font-medium"
             onClick={() => {
-              setSelectedReportType(row.reportType);
-              setDateRange(row.dateRange);
-              setVillageFilter(row.village !== 'All Villages' ? row.village : '');
-              handleGenerateReport();
+              try {
+                const f = JSON.parse(row.filters);
+                setSelectedReportType(row.reportType);
+                setSearchTerm(f.searchTerm || '');
+                setStatusFilter(f.statusFilter || '');
+                setRoleFilter(f.roleFilter || '');
+                setModuleFilter(f.moduleFilter || '');
+                setActionFilter(f.actionFilter || '');
+                setResultFilter(f.resultFilter || '');
+                setDateFilter(f.dateFilter || '');
+                setVillageFilter(f.villageFilter || '');
+                setDistrictFilter(f.districtFilter || '');
+                // Auto trigger run
+                setTimeout(() => handleGenerateReport(1), 100);
+              } catch (e) {
+                console.error(e);
+              }
             }}
           >
-            View / Re-run
+            Re-run
           </button>
         </div>
       )
@@ -170,43 +366,153 @@ const Reports = () => {
           <FileOutput size={18} className="text-gov-blue" /> Configure New Report
         </h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-end">
-          <div className="lg:col-span-2">
+        <div className="space-y-4">
+          <div className="w-full">
             <Select
               label="Report Type"
-              options={reportTypes.map(rt => ({ label: rt, value: rt }))}
+              options={reportTypesList.map(rt => ({ label: rt, value: rt }))}
               value={selectedReportType}
               onChange={(e) => setSelectedReportType(e.target.value)}
             />
           </div>
           
-          <Select
-            label="Date Range"
-            options={dateRangeOptions.map(r => ({ label: r, value: r }))}
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-          />
-          
-          <Select
-            label="District (Optional)"
-            options={[{ label: 'All Districts', value: '' }, ...districtsList.map(d => ({ label: d, value: d }))]}
-            value={districtFilter}
-            onChange={(e) => setDistrictFilter(e.target.value)}
-          />
-          
-          <Select
-            label="Village (Optional)"
-            options={[{ label: 'All Villages', value: '' }, ...villagesList.map(v => ({ label: v, value: v }))]}
-            value={villageFilter}
-            onChange={(e) => setVillageFilter(e.target.value)}
-          />
-          
-          <Select
-            label="Operator (Optional)"
-            options={[{ label: 'All Operators', value: '' }, ...operatorsList.map(o => ({ label: o.name, value: o.name }))]}
-            value={operatorFilter}
-            onChange={(e) => setOperatorFilter(e.target.value)}
-          />
+          {/* Dynamic Filters Grid */}
+          {selectedReportType !== 'Overall System Summary' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border-t border-gray-100 pt-4">
+              {/* Common Search Filter */}
+              <div className="flex flex-col">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search Query</label>
+                <input
+                  type="text"
+                  placeholder="Search name, ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gov-blue focus:border-gov-blue text-sm"
+                />
+              </div>
+
+              {/* User Report Specific Filters */}
+              {selectedReportType === 'User Report' && (
+                <>
+                  <Select
+                    label="Role"
+                    options={[
+                      { label: 'All Roles', value: '' },
+                      { label: 'Admin', value: 'Admin' },
+                      { label: 'Operator', value: 'Operator' },
+                      { label: 'Villager', value: 'Villager' }
+                    ]}
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                  />
+                  <Select
+                    label="Status"
+                    options={[
+                      { label: 'All Statuses', value: '' },
+                      { label: 'Active', value: 'active' },
+                      { label: 'Inactive', value: 'inactive' }
+                    ]}
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  />
+                  <Select
+                    label="Village Context"
+                    options={[{ label: 'All Villages', value: '' }, ...villagesList.map(v => ({ label: v, value: v }))]}
+                    value={villageFilter}
+                    onChange={(e) => setVillageFilter(e.target.value)}
+                  />
+                </>
+              )}
+
+              {/* Village Report Specific Filters */}
+              {selectedReportType === 'Village Report' && (
+                <>
+                  <Select
+                    label="District"
+                    options={[{ label: 'All Districts', value: '' }, ...districtsList.map(d => ({ label: d, value: d }))]}
+                    value={districtFilter}
+                    onChange={(e) => setDistrictFilter(e.target.value)}
+                  />
+                  <Select
+                    label="Status"
+                    options={[
+                      { label: 'All Statuses', value: '' },
+                      { label: 'Active', value: 'active' },
+                      { label: 'Inactive', value: 'inactive' }
+                    ]}
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  />
+                </>
+              )}
+
+              {/* System Activity Specific Filters */}
+              {selectedReportType === 'System Activity / Audit Report' && (
+                <>
+                  <Select
+                    label="Module"
+                    options={[
+                      { label: 'All Modules', value: '' },
+                      { label: 'Authentication', value: 'Authentication' },
+                      { label: 'Users', value: 'Users' },
+                      { label: 'Villages', value: 'Villages' }
+                    ]}
+                    value={moduleFilter}
+                    onChange={(e) => setModuleFilter(e.target.value)}
+                  />
+                  <Select
+                    label="Action"
+                    options={[
+                      { label: 'All Actions', value: '' },
+                      { label: 'Login', value: 'Login' },
+                      { label: 'Create', value: 'Create' },
+                      { label: 'Update', value: 'Update' },
+                      { label: 'Delete', value: 'Delete' },
+                      { label: 'Status Change', value: 'Status Change' }
+                    ]}
+                    value={actionFilter}
+                    onChange={(e) => setActionFilter(e.target.value)}
+                  />
+                  <Select
+                    label="User Role"
+                    options={[
+                      { label: 'All Roles', value: '' },
+                      { label: 'Admin', value: 'Admin' },
+                      { label: 'Operator', value: 'Operator' },
+                      { label: 'Villager', value: 'Villager' }
+                    ]}
+                    value={roleFilter}
+                    onChange={(e) => setRoleFilter(e.target.value)}
+                  />
+                  <Select
+                    label="Result"
+                    options={[
+                      { label: 'All Results', value: '' },
+                      { label: 'Success', value: 'Success' },
+                      { label: 'Failed', value: 'Failed' }
+                    ]}
+                    value={resultFilter}
+                    onChange={(e) => setResultFilter(e.target.value)}
+                  />
+                  <Select
+                    label="Village Context"
+                    options={[{ label: 'All Villages', value: '' }, ...villagesList.map(v => ({ label: v, value: v }))]}
+                    value={villageFilter}
+                    onChange={(e) => setVillageFilter(e.target.value)}
+                  />
+                  <div className="flex flex-col">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input
+                      type="date"
+                      value={dateFilter}
+                      onChange={(e) => setDateFilter(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-1 focus:ring-gov-blue focus:border-gov-blue text-sm"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
         
         <div className="mt-6 flex flex-wrap justify-between items-center border-t border-gray-100 pt-4">
@@ -218,7 +524,7 @@ const Reports = () => {
           </button>
           
           <Button 
-            onClick={handleGenerateReport} 
+            onClick={() => handleGenerateReport(1)} 
             disabled={isGenerating}
             className="flex items-center gap-2"
           >
@@ -260,23 +566,67 @@ const Reports = () => {
             </div>
             
             {/* Report Metadata */}
-            <div className="grid grid-cols-2 gap-4 mb-8 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 text-sm bg-gray-50 p-4 rounded border border-gray-150">
               <div className="flex gap-2">
-                <span className="font-semibold text-gray-700 w-24">Date Range:</span>
-                <span className="text-gray-900">{dateRange}</span>
+                <span className="font-semibold text-gray-700 w-32">Search Query:</span>
+                <span className="text-gray-900">{searchTerm || 'None'}</span>
               </div>
-              <div className="flex gap-2">
-                <span className="font-semibold text-gray-700 w-24">Village Scope:</span>
-                <span className="text-gray-900">{villageFilter || 'All Villages'}</span>
-              </div>
-              <div className="flex gap-2">
-                <span className="font-semibold text-gray-700 w-24">District:</span>
-                <span className="text-gray-900">{districtFilter || 'All Districts'}</span>
-              </div>
-              <div className="flex gap-2">
-                <span className="font-semibold text-gray-700 w-24">Operator:</span>
-                <span className="text-gray-900">{operatorFilter || 'All Operators'}</span>
-              </div>
+              {selectedReportType === 'User Report' && (
+                <>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">Role Filter:</span>
+                    <span className="text-gray-900">{roleFilter || 'All Roles'}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">Status Filter:</span>
+                    <span className="text-gray-900">{statusFilter || 'All Statuses'}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">Village Scope:</span>
+                    <span className="text-gray-900">{villageFilter || 'All Villages'}</span>
+                  </div>
+                </>
+              )}
+              {selectedReportType === 'Village Report' && (
+                <>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">District Scope:</span>
+                    <span className="text-gray-900">{districtFilter || 'All Districts'}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">Status Filter:</span>
+                    <span className="text-gray-900">{statusFilter || 'All Statuses'}</span>
+                  </div>
+                </>
+              )}
+              {selectedReportType === 'System Activity / Audit Report' && (
+                <>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">Module Scope:</span>
+                    <span className="text-gray-900">{moduleFilter || 'All Modules'}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">Action Scope:</span>
+                    <span className="text-gray-900">{actionFilter || 'All Actions'}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">Role Scope:</span>
+                    <span className="text-gray-900">{roleFilter || 'All Roles'}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">Result Scope:</span>
+                    <span className="text-gray-900">{resultFilter || 'All Results'}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">Village Scope:</span>
+                    <span className="text-gray-900">{villageFilter || 'All Villages'}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="font-semibold text-gray-700 w-32">Date:</span>
+                    <span className="text-gray-900">{dateFilter || 'All Time'}</span>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Summary Statistics */}
@@ -297,32 +647,76 @@ const Reports = () => {
             {/* Detailed Table */}
             <div>
               <h3 className="text-lg font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">Detailed Breakdown</h3>
-              <div className="overflow-x-auto border border-gray-200 rounded">
-                <table className="w-full text-left border-collapse text-sm">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      {previewData.columns.map((col, idx) => (
-                        <th key={idx} className="border-b border-gray-200 p-3 font-semibold text-gray-700">{col}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewData.data.map((row, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50 border-b border-gray-100 last:border-0">
-                        {Object.values(row).map((val, vIdx) => (
-                          <td key={vIdx} className="p-3 text-gray-800">{val}</td>
+              {previewData.data.length === 0 ? (
+                <div className="p-8 text-center bg-gray-50 border border-dashed rounded-lg">
+                  <AlertCircle size={36} className="mx-auto text-gray-400 mb-2" />
+                  <p className="text-gray-600 font-medium">No report data found for the selected filters.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-gray-200 rounded">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        {previewData.columns.map((col, idx) => (
+                          <th key={idx} className="border-b border-gray-200 p-3 font-semibold text-gray-700">{col}</th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {previewData.data.map((row, idx) => {
+                        const rowKey = row['User ID'] || row['Village ID'] || row['Log ID'] || row['Metric'] || idx;
+                        return (
+                          <tr key={rowKey} className="hover:bg-gray-50 border-b border-gray-100 last:border-0">
+                            {Object.values(row).map((val, vIdx) => (
+                              <td key={vIdx} className="p-3 text-gray-800">{val}</td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="mt-12 text-center text-sm text-gray-400 print:block">
               --- End of Report ---
             </div>
           </div>
+
+          {/* Pagination Controls for Preview */}
+          {selectedReportType !== 'Overall System Summary' && totalRecords > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-gray-50 border-t border-gray-150 print:hidden">
+              <div className="text-sm text-gray-500">
+                Showing <span className="font-medium">{(page - 1) * limit + 1}</span> to{' '}
+                <span className="font-medium">{Math.min(page * limit, totalRecords)}</span> of{' '}
+                <span className="font-medium">{totalRecords}</span> records
+              </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => handleGenerateReport(Math.max(1, page - 1))}
+                    disabled={page === 1}
+                    className="!px-3 !py-1.5 text-sm bg-white"
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600 font-medium px-2">
+                    Page {page} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleGenerateReport(Math.min(totalPages, page + 1))}
+                    disabled={page === totalPages}
+                    className="!px-3 !py-1.5 text-sm bg-white"
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       ) : (
         <Card className="p-12 flex flex-col items-center justify-center text-center bg-gray-50/50 border-dashed print:hidden">
@@ -340,7 +734,13 @@ const Reports = () => {
           </h3>
         </div>
         <div className="overflow-x-auto">
-          <Table columns={historyColumns} data={history} keyExtractor={row => row.id} />
+          {history.length === 0 ? (
+            <div className="p-6 text-center text-gray-500 text-sm">
+              No reports have been generated in this session.
+            </div>
+          ) : (
+            <Table columns={historyColumns} data={history} keyExtractor={row => row.id} />
+          )}
         </div>
       </Card>
       

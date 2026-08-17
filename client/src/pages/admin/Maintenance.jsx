@@ -10,13 +10,16 @@ import PieChart from '../../components/charts/PieChart';
 import BarChart from '../../components/charts/BarChart';
 import { Search, Edit2, AlertCircle, Eye, RefreshCw, AlertTriangle, Clock, MapPin, User, Calendar, Wrench, ArrowRight, Settings, Plus, UserPlus } from 'lucide-react';
 import { mockMaintenance, maintenanceTypes, maintenancePriorities, maintenanceStatuses } from '../../data/mockMaintenance';
-import { villagesList } from '../../data/mockUsers';
-import { operatorsList } from '../../data/mockVillages';
+import api from '../../services/api';
 
 const Maintenance = () => {
   const [records, setRecords] = useState([]);
+  const [villages, setVillages] = useState([]);
+  const [operators, setOperators] = useState([]);
+  const [pumps, setPumps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Filters and Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,8 +31,8 @@ const Maintenance = () => {
   const [dateFilter, setDateFilter] = useState('');
 
   // Modals state
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isAssignConfirmOpen, setIsAssignConfirmOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
   
@@ -54,21 +57,47 @@ const Maintenance = () => {
   // Tracking if operator was changed for the confirm modal
   const [pendingOperatorChange, setPendingOperatorChange] = useState(false);
 
-  // Fetch records
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+      const [mntRes, villagesRes, operatorsRes, pumpsRes] = await Promise.all([
+        api.get('/maintenance?limit=100'),
+        api.get('/villages?limit=100'),
+        api.get('/users?role=operator&limit=100'),
+        api.get('/pumps?limit=100')
+      ]);
+      setVillages(villagesRes.data);
+      setOperators(operatorsRes.data);
+      setPumps(pumpsRes.data);
+
+      const mapped = mntRes.data.map(r => ({
+        id: r._id.toString(),
+        pumpId: r.pump?._id || '',
+        pumpName: r.pump?.name || 'Unknown Pump',
+        village: r.pump?.village?.name || 'Unknown Village',
+        maintenanceType: r.complaint ? 'Corrective' : 'Preventive',
+        problemDescription: r.issue,
+        priority: r.priority,
+        assignedOperator: r.assignedTo?.name || 'Unassigned',
+        operatorId: r.assignedTo?._id || '',
+        requestDate: r.startDate,
+        scheduledDate: r.startDate,
+        startDate: r.startDate,
+        completionDate: r.endDate || '',
+        status: r.status,
+        resolutionDescription: r.remarks || '',
+        remarks: r.remarks || ''
+      }));
+      setRecords(mapped);
+      setError(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch maintenance records.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchRecords = async () => {
-      try {
-        setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 600));
-        setRecords(mockMaintenance);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch maintenance records. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchRecords();
   }, []);
 
@@ -172,20 +201,39 @@ const Maintenance = () => {
     saveForm();
   };
 
-  const saveForm = () => {
-    const newData = { ...formData, lastUpdated: new Date().toISOString() };
-    
-    if (selectedRecord) {
-      setRecords(records.map(r => r.id === selectedRecord.id ? { ...r, ...newData } : r));
-    } else {
-      const newRecord = {
-        id: `MNT-${8000 + records.length + 1}`,
-        ...newData
+  const saveForm = async () => {
+    setIsSaving(true);
+    try {
+      const pDoc = pumps.find(p => p.name === formData.pumpName || p.id === formData.pumpId || p._id === formData.pumpId);
+      if (!pDoc) throw new Error('Selected pump ID/name is invalid.');
+
+      const opDoc = operators.find(o => o.name === formData.assignedOperator);
+      
+      const payload = {
+        pump: pDoc.id || pDoc._id,
+        assignedTo: opDoc?._id || null,
+        issue: formData.problemDescription,
+        priority: formData.priority,
+        status: formData.status,
+        startDate: formData.startDate || formData.requestDate || new Date().toISOString().split('T')[0],
+        endDate: formData.completionDate || '',
+        remarks: formData.resolutionDescription || formData.remarks || ''
       };
-      setRecords([newRecord, ...records]);
+
+      if (selectedRecord) {
+        await api.put(`/maintenance/${selectedRecord.id}`, payload);
+      } else {
+        await api.post('/maintenance', payload);
+      }
+
+      setIsFormModalOpen(false);
+      setIsAssignConfirmOpen(false);
+      fetchRecords();
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Failed to save maintenance record.');
+    } finally {
+      setIsSaving(false);
     }
-    setIsFormModalOpen(false);
-    setIsAssignConfirmOpen(false);
   };
 
   const getStatusBadgeVariant = (status) => {
@@ -383,7 +431,7 @@ const Maintenance = () => {
           </div>
           
           <Select
-            options={[{ label: 'All Villages', value: '' }, ...villagesList.map(v => ({ label: v, value: v }))]}
+            options={[{ label: 'All Villages', value: '' }, ...villages.map(v => ({ label: v.name, value: v.name }))]}
             value={villageFilter}
             onChange={(e) => setVillageFilter(e.target.value)}
           />
@@ -407,7 +455,7 @@ const Maintenance = () => {
           />
 
           <Select
-            options={[{ label: 'All Operators', value: '' }, ...operatorsList.map(o => ({ label: o.name, value: o.name }))]}
+            options={[{ label: 'All Operators', value: '' }, ...operators.map(o => ({ label: o.name, value: o.name }))]}
             value={operatorFilter}
             onChange={(e) => setOperatorFilter(e.target.value)}
           />
@@ -477,7 +525,7 @@ const Maintenance = () => {
             <Select 
               label="Village" 
               required
-              options={[{ label: 'Select Village...', value: '' }, ...villagesList.map(v => ({ label: v, value: v }))]}
+              options={[{ label: 'Select Village...', value: '' }, ...villages.map(v => ({ label: v.name, value: v.name }))]}
               value={formData.village}
               onChange={(e) => setFormData({...formData, village: e.target.value})}
             />
@@ -516,7 +564,7 @@ const Maintenance = () => {
               <UserPlus size={16} /> Assign Operator / Technician
             </label>
             <Select 
-              options={[{ label: 'Unassigned', value: '' }, ...operatorsList.map(o => ({ label: o.name, value: o.name }))]}
+              options={[{ label: 'Unassigned', value: '' }, ...operators.map(o => ({ label: o.name, value: o.name }))]}
               value={formData.assignedOperator}
               onChange={(e) => {
                 setFormData({...formData, assignedOperator: e.target.value});
@@ -589,7 +637,9 @@ const Maintenance = () => {
 
           <div className="pt-4 flex justify-end gap-3 border-t">
             <Button variant="outline" type="button" onClick={() => setIsFormModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Save Record</Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save Record'}
+            </Button>
           </div>
         </form>
       </Modal>

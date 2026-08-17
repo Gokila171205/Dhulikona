@@ -1,6 +1,8 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import DashboardLayout from '../components/layout/DashboardLayout';
+import ProtectedRoute from '../components/layout/ProtectedRoute';
+import Login from '../pages/auth/Login';
 
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard';
@@ -28,10 +30,12 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/admin" replace />} />
+      <Route path="/login" element={<Login />} />
       
       {/* Admin Routes */}
-      <Route path="/admin" element={<DashboardLayout role="ADMIN" />}>
-        <Route index element={<AdminDashboard />} />
+      <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
+        <Route path="/admin" element={<DashboardLayout role="ADMIN" />}>
+          <Route index element={<AdminDashboard />} />
         <Route path="villages" element={<AdminVillages />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="pumps" element={<AdminPumps />} />
@@ -45,15 +49,20 @@ const AppRoutes = () => {
         <Route path="notifications" element={<AdminNotifications />} />
         <Route path="audit-logs" element={<AdminAuditLogs />} />
       </Route>
+      </Route>
 
       {/* Operator Routes Placeholder */}
+      <Route element={<ProtectedRoute allowedRoles={['OPERATOR']} />}>
       <Route path="/operator" element={<DashboardLayout role="OPERATOR" />}>
         <Route index element={<Placeholder title="Operator Dashboard" />} />
       </Route>
+      </Route>
 
       {/* Villager Routes Placeholder */}
+      <Route element={<ProtectedRoute allowedRoles={['VILLAGER']} />}>
       <Route path="/villager" element={<DashboardLayout role="VILLAGER" />}>
         <Route index element={<Placeholder title="Villager Dashboard" />} />
+      </Route>
       </Route>
       
       {/* 404 Route */}

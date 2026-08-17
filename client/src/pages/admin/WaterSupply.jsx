@@ -10,13 +10,14 @@ import BarChart from '../../components/charts/BarChart';
 import PieChart from '../../components/charts/PieChart';
 import { Search, Edit2, AlertCircle, Eye, Activity, RefreshCw, Calendar, Droplets, ListChecks, CheckCircle, XCircle } from 'lucide-react';
 import { mockWaterSupply, frequencyList, statusList } from '../../data/mockWaterSupply';
-import { villagesList } from '../../data/mockUsers';
-import { operatorsList } from '../../data/mockVillages';
+import api from '../../services/api';
 
 const WaterSupply = () => {
   const [supplyRecords, setSupplyRecords] = useState([]);
+  const [villages, setVillages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Filters and Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -43,21 +44,38 @@ const WaterSupply = () => {
     remarks: ''
   });
 
-  // Fetch records
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+      const [supplyRes, villagesRes] = await Promise.all([
+        api.get('/water-supply?limit=100'),
+        api.get('/villages?limit=100')
+      ]);
+      setVillages(villagesRes.data);
+      const mapped = supplyRes.data.map(r => ({
+        id: r._id.toString(),
+        village: r.village?.name || 'Unknown',
+        villageId: r.village?._id || '',
+        supplyDate: r.supplyDate,
+        scheduledStart: r.scheduledStart,
+        scheduledEnd: r.scheduledEnd,
+        actualStart: r.actualStart,
+        actualEnd: r.actualEnd,
+        frequency: r.frequency,
+        status: r.status,
+        remarks: r.remarks || '',
+        recordedBy: r.recordedBy?.name || 'Operator'
+      }));
+      setSupplyRecords(mapped);
+      setError(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch supply records.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchRecords = async () => {
-      try {
-        setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 600));
-        setSupplyRecords(mockWaterSupply);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch supply records. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchRecords();
   }, []);
 
@@ -143,28 +161,37 @@ const WaterSupply = () => {
     setIsViewModalOpen(true);
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
-    const newRecordData = {
-      ...formData,
-      actualStart: formData.actualStart || '-',
-      actualEnd: formData.actualEnd || '-',
-      lastUpdated: new Date().toISOString()
-    };
+    setIsSaving(true);
+    try {
+      const vDoc = villages.find(v => v.name === formData.village);
+      if (!vDoc) throw new Error('Selected village name is invalid.');
 
-    if (selectedRecord) {
-      // Edit
-      setSupplyRecords(supplyRecords.map(r => r.id === selectedRecord.id ? { ...r, ...newRecordData } : r));
-    } else {
-      // Add
-      const newRecord = {
-        id: `WS-${5000 + supplyRecords.length + 1}`,
-        ...newRecordData,
-        recordedBy: 'Admin User'
+      const payload = {
+        village: vDoc._id,
+        supplyDate: formData.supplyDate,
+        scheduledStart: formData.scheduledStart,
+        scheduledEnd: formData.scheduledEnd,
+        actualStart: formData.actualStart || '-',
+        actualEnd: formData.actualEnd || '-',
+        frequency: formData.frequency,
+        status: formData.status,
+        remarks: formData.remarks
       };
-      setSupplyRecords([newRecord, ...supplyRecords]);
+
+      if (selectedRecord) {
+        await api.put(`/water-supply/${selectedRecord.id}`, payload);
+      } else {
+        await api.post('/water-supply', payload);
+      }
+      setIsFormModalOpen(false);
+      fetchRecords();
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Failed to save water supply record.');
+    } finally {
+      setIsSaving(false);
     }
-    setIsFormModalOpen(true);
   };
 
   const getStatusBadgeVariant = (status) => {
@@ -336,7 +363,7 @@ const WaterSupply = () => {
           <Select
             options={[
               { label: 'All Villages', value: '' },
-              ...villagesList.map(v => ({ label: v, value: v }))
+              ...villages.map(v => ({ label: v.name, value: v.name }))
             ]}
             value={villageFilter}
             onChange={(e) => setVillageFilter(e.target.value)}
@@ -398,7 +425,7 @@ const WaterSupply = () => {
               required
               options={[
                 { label: 'Select Village...', value: '' },
-                ...villagesList.map(v => ({ label: v, value: v }))
+                ...villages.map(v => ({ label: v.name, value: v.name }))
               ]}
               value={formData.village}
               onChange={(e) => setFormData({...formData, village: e.target.value})}
@@ -474,7 +501,9 @@ const WaterSupply = () => {
 
           <div className="pt-4 flex justify-end gap-3 border-t">
             <Button variant="outline" type="button" onClick={() => setIsFormModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Save Record</Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save Record'}
+            </Button>
           </div>
         </form>
       </Modal>

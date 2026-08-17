@@ -6,16 +6,20 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
 import Modal from '../../components/ui/Modal';
+import BarChart from '../../components/charts/BarChart';
 import PieChart from '../../components/charts/PieChart';
 import { Search, Edit2, AlertCircle, Eye, RefreshCw, CheckCircle, AlertTriangle, XCircle, Droplet, Plus } from 'lucide-react';
 import { mockWaterQuality, waterQualityStatusList } from '../../data/mockWaterQuality';
-import { villagesList } from '../../data/mockUsers';
-import { operatorsList } from '../../data/mockVillages';
+import api from '../../services/api';
 
 const WaterQuality = () => {
   const [qualityRecords, setQualityRecords] = useState([]);
+  const [villages, setVillages] = useState([]);
+  const [operators, setOperators] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [operatorLoading, setOperatorLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Filters and Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -42,21 +46,41 @@ const WaterQuality = () => {
     remarks: ''
   });
 
-  // Fetch records
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+      setOperatorLoading(true);
+      const [qualityRes, villagesRes, operatorsRes] = await Promise.all([
+        api.get('/water-quality?limit=100'),
+        api.get('/villages?limit=100'),
+        api.get('/users?role=operator&limit=100')
+      ]);
+      setVillages(villagesRes.data);
+      setOperators(operatorsRes.data);
+      const mapped = qualityRes.data.map(r => ({
+        id: r._id.toString(),
+        village: r.village?.name || 'Unknown',
+        villageId: r.village?._id || '',
+        testDate: r.testDate,
+        ph: r.ph,
+        tds: r.tds,
+        turbidity: r.turbidity,
+        chlorine: r.chlorine,
+        status: r.status,
+        remarks: r.remarks || '',
+        testedBy: r.recordedBy?.name || 'Operator'
+      }));
+      setQualityRecords(mapped);
+      setError(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch water quality records.');
+    } finally {
+      setLoading(false);
+      setOperatorLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchRecords = async () => {
-      try {
-        setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 600));
-        setQualityRecords(mockWaterQuality);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch water quality records. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchRecords();
   }, []);
 
@@ -135,29 +159,36 @@ const WaterQuality = () => {
     setIsViewModalOpen(true);
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
-    const newRecordData = {
-      ...formData,
-      ph: parseFloat(formData.ph),
-      turbidity: parseFloat(formData.turbidity),
-      tds: parseInt(formData.tds),
-      chlorine: parseFloat(formData.chlorine),
-      lastUpdated: new Date().toISOString()
-    };
+    setIsSaving(true);
+    try {
+      const vDoc = villages.find(v => v.name === formData.village);
+      if (!vDoc) throw new Error('Selected village name is invalid.');
 
-    if (selectedRecord) {
-      // Edit
-      setQualityRecords(qualityRecords.map(r => r.id === selectedRecord.id ? { ...r, ...newRecordData } : r));
-    } else {
-      // Add
-      const newRecord = {
-        id: `WQT-${6000 + qualityRecords.length + 1}`,
-        ...newRecordData
+      const payload = {
+        village: vDoc._id,
+        testDate: formData.testDate,
+        ph: Number(formData.ph),
+        tds: Number(formData.tds),
+        turbidity: Number(formData.turbidity),
+        chlorine: Number(formData.chlorine),
+        status: formData.status,
+        remarks: formData.remarks
       };
-      setQualityRecords([newRecord, ...qualityRecords]);
+
+      if (selectedRecord) {
+        await api.put(`/water-quality/${selectedRecord.id}`, payload);
+      } else {
+        await api.post('/water-quality', payload);
+      }
+      setIsFormModalOpen(false);
+      fetchRecords();
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Failed to save water quality test.');
+    } finally {
+      setIsSaving(false);
     }
-    setIsFormModalOpen(false);
   };
 
   const getStatusBadgeVariant = (status) => {
@@ -302,7 +333,7 @@ const WaterQuality = () => {
           <Select
             options={[
               { label: 'All Villages', value: '' },
-              ...villagesList.map(v => ({ label: v, value: v }))
+              ...villages.map(v => ({ label: v.name, value: v.name }))
             ]}
             value={villageFilter}
             onChange={(e) => setVillageFilter(e.target.value)}
@@ -325,11 +356,12 @@ const WaterQuality = () => {
 
           <Select
             options={[
-              { label: 'All Testers', value: '' },
-              ...operatorsList.map(o => ({ label: o.name, value: o.name }))
+              { label: operatorLoading ? 'Loading Testers...' : operators.length === 0 ? 'No active operators available' : 'All Testers', value: '' },
+              ...operators.map(o => ({ label: o.name, value: o.name }))
             ]}
             value={testerFilter}
             onChange={(e) => setTesterFilter(e.target.value)}
+            disabled={operatorLoading || operators.length === 0}
           />
         </div>
         
@@ -364,7 +396,7 @@ const WaterQuality = () => {
               required
               options={[
                 { label: 'Select Village...', value: '' },
-                ...villagesList.map(v => ({ label: v, value: v }))
+                ...villages.map(v => ({ label: v.name, value: v.name }))
               ]}
               value={formData.village}
               onChange={(e) => setFormData({...formData, village: e.target.value})}
@@ -383,11 +415,12 @@ const WaterQuality = () => {
               label="Tested By" 
               required
               options={[
-                { label: 'Select Tester...', value: '' },
-                ...operatorsList.map(o => ({ label: o.name, value: o.name }))
+                { label: operatorLoading ? 'Loading Testers...' : operators.length === 0 ? 'No active operators available' : 'Select Tester...', value: '' },
+                ...operators.map(o => ({ label: o.name, value: o.name }))
               ]}
               value={formData.testedBy}
               onChange={(e) => setFormData({...formData, testedBy: e.target.value})}
+              disabled={operatorLoading || operators.length === 0}
             />
             <Select 
               label="Overall Status" 
@@ -448,7 +481,9 @@ const WaterQuality = () => {
 
           <div className="pt-4 flex justify-end gap-3 border-t">
             <Button variant="outline" type="button" onClick={() => setIsFormModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Save Record</Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save Record'}
+            </Button>
           </div>
         </form>
       </Modal>

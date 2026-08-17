@@ -6,11 +6,11 @@ import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
 import Modal from '../../components/ui/Modal';
-import PieChart from '../../components/charts/PieChart';
 import BarChart from '../../components/charts/BarChart';
-import { Search, Edit2, AlertCircle, Eye, RefreshCw, AlertTriangle, MapPin, User, Calendar, CreditCard, FileText, CheckCircle, Plus } from 'lucide-react';
-import { mockPayments, paymentStatuses, paymentMethods, billingPeriods } from '../../data/mockPayments';
-import { villagesList } from '../../data/mockUsers';
+import PieChart from '../../components/charts/PieChart';
+import { Search, Edit2, AlertCircle, Eye, RefreshCw, IndianRupee, CreditCard, Calendar, FileText, CheckCircle, Clock, Plus, AlertTriangle, MapPin, User } from 'lucide-react';
+import { mockPayments, paymentMethods, billingPeriods, paymentStatuses } from '../../data/mockPayments';
+import api from '../../services/api';
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', {
@@ -23,8 +23,11 @@ const formatCurrency = (amount) => {
 
 const Payments = () => {
   const [payments, setPayments] = useState([]);
+  const [villages, setVillages] = useState([]);
+  const [villagers, setVillagers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Filters and Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,21 +59,42 @@ const Payments = () => {
   // Calculate balance dynamically
   const formBalance = Math.max(0, formData.amountDue - formData.amountPaid);
 
-  // Fetch records
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+      const [paymentsRes, villagesRes, usersRes] = await Promise.all([
+        api.get('/payments?limit=100'),
+        api.get('/villages?limit=100'),
+        api.get('/users?role=villager&limit=100')
+      ]);
+      setVillages(villagesRes.data);
+      setVillagers(usersRes.data);
+
+      const mapped = paymentsRes.data.map(p => ({
+        id: p._id.toString(),
+        householdId: p.user?.userId || p.user?._id || 'Unknown',
+        householdName: p.user?.name || 'Unknown User',
+        village: p.village?.name || 'Unknown Village',
+        villageId: p.village?._id || '',
+        billingPeriod: 'August 2026',
+        amountDue: p.amount,
+        amountPaid: p.status === 'Paid' ? p.amount : 0,
+        paymentDate: p.paidDate || '',
+        paymentMethod: p.paymentMethod || '',
+        status: p.status,
+        remarks: p.transactionId || '',
+        recordedBy: 'Admin User'
+      }));
+      setPayments(mapped);
+      setError(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch payments.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchRecords = async () => {
-      try {
-        setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 600));
-        setPayments(mockPayments);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch payment records. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchRecords();
   }, []);
 
@@ -107,11 +131,11 @@ const Payments = () => {
     value: payments.filter(p => p.status === status).length
   })).filter(d => d.value > 0);
 
-  const villageCollectionData = villagesList.map(village => {
-    const villagePayments = payments.filter(p => p.village === village);
+  const villageCollectionData = villages.map(village => {
+    const villagePayments = payments.filter(p => p.village === village.name);
     if (villagePayments.length === 0) return null;
     return {
-      name: village,
+      name: village.name,
       value: villagePayments.reduce((sum, p) => sum + p.amountPaid, 0)
     };
   }).filter(Boolean);
@@ -153,43 +177,40 @@ const Payments = () => {
     setIsFormModalOpen(true);
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
-    
-    // Validation
-    if (formData.amountPaid > formData.amountDue) {
-      setFormError('Amount paid cannot exceed amount due in this system.');
-      return;
-    }
-    
-    const parsedDue = parseFloat(formData.amountDue);
-    const parsedPaid = parseFloat(formData.amountPaid);
-    
-    // Auto-derive status if user didn't explicitly set it or it needs correction based on amounts
-    let derivedStatus = formData.status;
-    if (parsedPaid === parsedDue && parsedDue > 0) derivedStatus = 'Paid';
-    else if (parsedPaid > 0 && parsedPaid < parsedDue) derivedStatus = 'Partially Paid';
-    else if (parsedPaid === 0 && (derivedStatus === 'Paid' || derivedStatus === 'Partially Paid')) derivedStatus = 'Pending';
-    
-    const newData = { 
-      ...formData, 
-      amountDue: parsedDue,
-      amountPaid: parsedPaid,
-      status: derivedStatus,
-      lastUpdated: new Date().toISOString(),
-      recordedBy: selectedPayment ? selectedPayment.recordedBy : 'Admin User'
-    };
-    
-    if (selectedPayment) {
-      setPayments(payments.map(p => p.id === selectedPayment.id ? { ...p, ...newData } : p));
-    } else {
-      const newPayment = {
-        id: `PAY-${9000 + payments.length + 1}`,
-        ...newData
+    setIsSaving(true);
+    try {
+      const vDoc = villages.find(v => v.name === formData.village);
+      if (!vDoc) throw new Error('Selected village name is invalid.');
+
+      const userDoc = villagers.find(u => u.name === formData.householdName || u.userId === formData.householdId);
+      if (!userDoc) throw new Error('Selected household (villager) is invalid.');
+
+      const payload = {
+        user: userDoc._id,
+        village: vDoc._id,
+        amount: Number(formData.amountDue),
+        dueDate: formData.paymentDate || new Date().toISOString().split('T')[0],
+        paidDate: formData.status === 'Paid' ? (formData.paymentDate || new Date().toISOString().split('T')[0]) : '',
+        status: formData.status,
+        paymentMethod: formData.paymentMethod,
+        transactionId: formData.remarks || ''
       };
-      setPayments([newPayment, ...payments]);
+
+      if (selectedPayment) {
+        await api.put(`/payments/${selectedPayment.id}`, payload);
+      } else {
+        await api.post('/payments', payload);
+      }
+
+      setIsFormModalOpen(false);
+      fetchRecords();
+    } catch (err) {
+      setFormError(err.response?.data?.message || err.message || 'Failed to save payment.');
+    } finally {
+      setIsSaving(false);
     }
-    setIsFormModalOpen(false);
   };
 
   const getStatusBadgeVariant = (status) => {
@@ -376,7 +397,7 @@ const Payments = () => {
           </div>
           
           <Select
-            options={[{ label: 'All Villages', value: '' }, ...villagesList.map(v => ({ label: v, value: v }))]}
+            options={[{ label: 'All Villages', value: '' }, ...villages.map(v => ({ label: v.name, value: v.name }))]}
             value={villageFilter}
             onChange={(e) => setVillageFilter(e.target.value)}
           />
@@ -452,7 +473,7 @@ const Payments = () => {
             <Select 
               label="Village" 
               required
-              options={[{ label: 'Select Village...', value: '' }, ...villagesList.map(v => ({ label: v, value: v }))]}
+              options={[{ label: 'Select Village...', value: '' }, ...villages.map(v => ({ label: v.name, value: v.name }))]}
               value={formData.village}
               onChange={(e) => setFormData({...formData, village: e.target.value})}
               disabled={!!selectedPayment}
@@ -521,7 +542,9 @@ const Payments = () => {
 
           <div className="pt-4 flex justify-end gap-3 border-t">
             <Button variant="outline" type="button" onClick={() => setIsFormModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Save Record</Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save Record'}
+            </Button>
           </div>
         </form>
       </Modal>

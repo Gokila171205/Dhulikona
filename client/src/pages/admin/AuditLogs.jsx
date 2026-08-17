@@ -11,10 +11,8 @@ import {
   FileText, Search, RefreshCw, Eye, ShieldCheck, Activity, User, 
   MapPin, Clock, Info, CheckCircle, XCircle, ChevronDown, ArrowDown
 } from 'lucide-react';
-import { 
-  mockAuditLogs, roleOptions, moduleOptions, actionOptions, resultOptions, dateRangeOptions 
-} from '../../data/mockAuditLogs';
-import { villagesList } from '../../data/mockUsers';
+import { roleOptions, moduleOptions, actionOptions, resultOptions, dateRangeOptions } from '../../data/mockAuditLogs';
+import api from '../../services/api';
 
 const AuditLogs = () => {
   const [logs, setLogs] = useState([]);
@@ -28,62 +26,87 @@ const AuditLogs = () => {
   const [actionFilter, setActionFilter] = useState('');
   const [resultFilter, setResultFilter] = useState('');
   const [villageFilter, setVillageFilter] = useState('');
-  const [dateFilter, setDateFilter] = useState(dateRangeOptions[1]); // Last 7 Days Default
+  const [dateFilter, setDateFilter] = useState('');
+
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalLogs, setTotalLogs] = useState(0);
+  const limit = 10;
+
+  // Stats data for summaries and chart
+  const [allLogsForStats, setAllLogsForStats] = useState([]);
 
   // Modal
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState(null);
 
+  const [villagesList, setVillagesList] = useState([]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const params = {
+        page,
+        limit
+      };
+
+      if (searchTerm) params.search = searchTerm;
+      if (roleFilter) params.role = roleFilter.toLowerCase();
+      if (moduleFilter) params.module = moduleFilter.toUpperCase().replace(' ', '_');
+      if (actionFilter) params.action = actionFilter.toUpperCase().replace(' ', '_');
+      if (resultFilter) params.result = resultFilter === 'Success' ? 'SUCCESS' : 'FAILED';
+      if (villageFilter) params.village = villageFilter;
+      if (dateFilter) params.date = dateFilter;
+
+      const [logsRes, villagesRes, statsRes] = await Promise.all([
+        api.get('/audit-logs', { params }),
+        api.get('/villages', { params: { limit: 100 } }),
+        api.get('/audit-logs', { params: { limit: 1000 } })
+      ]);
+
+      setLogs(logsRes.data);
+      setTotalPages(logsRes.pagination?.totalPages || 1);
+      setTotalLogs(logsRes.pagination?.total || 0);
+      setVillagesList(villagesRes.data);
+      setAllLogsForStats(statsRes.data);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch audit logs.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Reset page to 1 when filters change to prevent empty states
   useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setLogs(mockAuditLogs);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch audit logs.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchLogs();
-  }, []);
+    setPage(1);
+  }, [searchTerm, roleFilter, moduleFilter, actionFilter, resultFilter, villageFilter, dateFilter]);
+
+  useEffect(() => {
+    // Add simple debounce for search
+    const timer = setTimeout(() => {
+      fetchData();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm, roleFilter, moduleFilter, actionFilter, resultFilter, villageFilter, dateFilter, page]);
 
   // Filter Logic
-  const filteredLogs = logs.filter(log => {
-    const searchLower = searchTerm.toLowerCase();
-    const matchesSearch = 
-      log.id.toLowerCase().includes(searchLower) || 
-      log.userName.toLowerCase().includes(searchLower) ||
-      log.userId.toLowerCase().includes(searchLower) ||
-      log.description.toLowerCase().includes(searchLower);
-    
-    const matchesRole = roleFilter ? log.role === roleFilter : true;
-    const matchesModule = moduleFilter ? log.module === moduleFilter : true;
-    const matchesAction = actionFilter ? log.action === actionFilter : true;
-    const matchesResult = resultFilter ? log.result === resultFilter : true;
-    const matchesVillage = villageFilter ? log.village === villageFilter : true;
-    
-    // In a real app date matching would happen here based on ISO strings
-    
-    return matchesSearch && matchesRole && matchesModule && matchesAction && matchesResult && matchesVillage;
-  });
+  const filteredLogs = logs;
 
   // Summary Calculations
-  const totalActivities = logs.length;
-  // Mock today's count based on the first few items matching today's date
-  const todaysActivities = logs.filter(log => new Date(log.dateTime).toDateString() === new Date('2026-08-13').toDateString()).length;
-  const adminActions = logs.filter(log => log.role === 'Admin').length;
-  const operatorActions = logs.filter(log => log.role === 'Operator').length;
-  const successfulActions = logs.filter(log => log.result === 'Success').length;
-  const failedActions = logs.filter(log => log.result === 'Failed').length;
+  const totalActivities = totalLogs;
+  const todaysActivities = allLogsForStats.filter(log => new Date(log.createdAt).toDateString() === new Date().toDateString()).length;
+  const adminActions = allLogsForStats.filter(log => (log.role || log.userId?.role) === 'admin').length;
+  const operatorActions = allLogsForStats.filter(log => (log.role || log.userId?.role) === 'operator').length;
+  const successfulActions = allLogsForStats.filter(log => log.result?.toUpperCase() === 'SUCCESS').length;
+  const failedActions = allLogsForStats.filter(log => log.result?.toUpperCase() === 'FAILED').length;
 
   // Chart Data: Activity by Module
   const activityByModuleData = moduleOptions.map(mod => ({
     name: mod,
-    value: logs.filter(log => log.module === mod).length
+    value: allLogsForStats.filter(log => log.module?.toUpperCase() === mod.toUpperCase()).length
   })).filter(d => d.value > 0).sort((a, b) => b.value - a.value);
 
   const handleClearFilters = () => {
@@ -93,56 +116,78 @@ const AuditLogs = () => {
     setActionFilter('');
     setResultFilter('');
     setVillageFilter('');
-    setDateFilter(dateRangeOptions[1]);
+    setDateFilter('');
   };
 
-  const handleView = (log) => {
-    setSelectedLog(log);
-    setIsViewModalOpen(true);
+  const handleView = async (log) => {
+    try {
+      setLoading(true);
+      const res = await api.get(`/audit-logs/${log._id || log.id}`);
+      setSelectedLog(res.data);
+      setIsViewModalOpen(true);
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to fetch audit log details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    const day = date.getDate();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'AM' : 'PM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${day} ${month} ${year} · ${hours}:${minutes} ${ampm}`;
   };
 
   const getRoleBadgeVariant = (role) => {
-    switch (role) {
-      case 'Admin': return 'danger';
-      case 'Operator': return 'primary';
-      case 'Villager': return 'default';
+    switch (role?.toLowerCase()) {
+      case 'admin': return 'danger';
+      case 'operator': return 'primary';
+      case 'villager': return 'default';
       default: return 'default';
     }
   };
 
   const getResultBadgeVariant = (result) => {
-    switch (result) {
-      case 'Success': return 'success';
-      case 'Failed': return 'danger';
+    switch (result?.toUpperCase()) {
+      case 'SUCCESS': return 'success';
+      case 'FAILED': return 'danger';
       default: return 'default';
     }
   };
 
   const columns = [
-    { header: 'Log ID', accessor: 'id' },
+    { header: 'Log ID', accessor: 'logId' },
     { 
       header: 'Date & Time', 
       render: (row) => (
-        <div>
-          <span className="block text-gray-900">{new Date(row.dateTime).toLocaleDateString()}</span>
-          <span className="block text-[10px] text-gray-500">{new Date(row.dateTime).toLocaleTimeString()}</span>
-        </div>
+        <span className="text-gray-900 text-xs font-medium">
+          {formatDateTime(row.createdAt)}
+        </span>
       )
     },
     { 
       header: 'User', 
       render: (row) => (
         <div>
-          <span className="font-semibold text-gray-800">{row.userName}</span>
-          <span className="block text-[10px] text-gray-500">{row.userId}</span>
+          <span className="font-semibold text-gray-800 block">{row.userName || row.userId?.name || 'System'}</span>
+          <span className="block text-[10px] text-gray-500">{row.userId?.userId || 'SYS'}</span>
         </div>
       )
     },
     { 
       header: 'Role', 
       render: (row) => (
-        <Badge variant={getRoleBadgeVariant(row.role)}>
-          {row.role}
+        <Badge variant={getRoleBadgeVariant(row.role || row.userId?.role)}>
+          {(row.role || row.userId?.role || 'system').toUpperCase()}
         </Badge>
       )
     },
@@ -155,12 +200,11 @@ const AuditLogs = () => {
       )
     },
     { header: 'Module', accessor: 'module' },
-    { header: 'Village', accessor: 'village' },
     { 
       header: 'Result', 
       render: (row) => (
         <Badge variant={getResultBadgeVariant(row.result)}>
-          {row.result}
+          {row.result?.toUpperCase()}
         </Badge>
       )
     },
@@ -179,6 +223,19 @@ const AuditLogs = () => {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gov-blue"></div>
         <span className="ml-2 text-gray-600">Loading audit history...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 text-center max-w-md mx-auto bg-red-50 text-red-700 rounded-lg border border-red-200 mt-10 space-y-4">
+        <AlertTriangle className="mx-auto text-red-500" size={48} />
+        <h3 className="text-lg font-bold">Error</h3>
+        <p className="text-sm">{error}</p>
+        <Button variant="primary" onClick={() => fetchData()}>
+          Retry Loading
+        </Button>
       </div>
     );
   }
@@ -267,19 +324,19 @@ const AuditLogs = () => {
               />
 
               <Select
-                options={[{ label: 'All Villages', value: '' }, ...villagesList.map(v => ({ label: v, value: v }))]}
+                options={[{ label: 'All Villages', value: '' }, ...villagesList.map(v => ({ label: v.name, value: v.name }))]}
                 value={villageFilter}
                 onChange={(e) => setVillageFilter(e.target.value)}
               />
 
-              <Select
-                options={dateRangeOptions.map(d => ({ label: d, value: d }))}
+              <Input
+                type="date"
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
               />
             </div>
             
-            {(searchTerm || roleFilter || moduleFilter || actionFilter || resultFilter || villageFilter || dateFilter !== dateRangeOptions[1]) && (
+            {(searchTerm || roleFilter || moduleFilter || actionFilter || resultFilter || villageFilter || dateFilter) && (
               <div className="mt-4 flex justify-end">
                 <button 
                   onClick={handleClearFilters}
@@ -292,7 +349,7 @@ const AuditLogs = () => {
           </Card>
 
           {/* Table */}
-          <Card className="overflow-hidden flex-1">
+          <Card className="overflow-hidden flex-1 flex flex-col justify-between">
             {filteredLogs.length === 0 ? (
               <div className="p-8 text-center flex flex-col items-center">
                 <ShieldCheck size={48} className="text-gray-300 mb-4" />
@@ -300,7 +357,43 @@ const AuditLogs = () => {
                 <p className="text-gray-500 text-sm mt-1">No audit activities match your current filters.</p>
               </div>
             ) : (
-              <Table columns={columns} data={filteredLogs} keyExtractor={row => row.id} />
+              <div>
+                <Table columns={columns} data={filteredLogs} keyExtractor={row => row._id || row.id} />
+                
+                {/* Pagination Controls */}
+                {totalLogs > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-gray-50 border-t border-gray-150">
+                    <div className="text-sm text-gray-500">
+                      Showing <span className="font-medium">{(page - 1) * limit + 1}</span> to{' '}
+                      <span className="font-medium">{Math.min(page * limit, totalLogs)}</span> of{' '}
+                      <span className="font-medium">{totalLogs}</span> audit logs
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => setPage(p => Math.max(1, p - 1))}
+                          disabled={page === 1}
+                          className="!px-3 !py-1.5 text-sm bg-white"
+                        >
+                          Previous
+                        </Button>
+                        <span className="text-sm text-gray-600 font-medium px-2">
+                          Page {page} of {totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                          disabled={page === totalPages}
+                          className="!px-3 !py-1.5 text-sm bg-white"
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </Card>
         </div>
@@ -315,14 +408,14 @@ const AuditLogs = () => {
             </h3>
             <div className="flex-1 space-y-4 overflow-y-auto max-h-[300px] pr-1">
               {logs.slice(0, 5).map(log => (
-                <div key={log.id} className="relative pl-4 border-l-2 border-blue-200 pb-1">
+                <div key={log._id || log.logId} className="relative pl-4 border-l-2 border-blue-200 pb-1">
                   <div className="absolute w-2 h-2 bg-gov-blue rounded-full -left-[5px] top-1"></div>
                   <div className="flex justify-between items-start mb-0.5">
-                    <span className="text-[10px] font-bold text-gov-blue">{new Date(log.dateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    <span className="text-[10px] font-bold text-gov-blue">{formatDateTime(log.createdAt)}</span>
                     <span className="text-[10px] font-semibold text-gray-400 bg-gray-50 px-1 rounded">{log.module}</span>
                   </div>
                   <p className="text-xs text-gray-800 leading-tight">
-                    <span className="font-semibold text-gray-900">{log.role}</span> {log.action.toLowerCase()} {log.description.toLowerCase().replace('updated ', '').replace('recorded ', '').replace('submitted ', '')}
+                    <span className="font-semibold text-gray-900">{log.userId?.role || 'system'}</span> {log.action.toLowerCase()} {log.description.toLowerCase().replace('updated ', '').replace('recorded ', '').replace('submitted ', '')}
                   </p>
                 </div>
               ))}
@@ -361,7 +454,7 @@ const AuditLogs = () => {
             <div className="flex justify-between items-start border-b border-gray-100 pb-4">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Activity Log Record</h3>
-                <p className="text-sm text-gray-500 font-mono mt-1">ID: {selectedLog.id}</p>
+                <p className="text-sm text-gray-500 font-mono mt-1">ID: {selectedLog.logId}</p>
               </div>
               <Badge variant={getResultBadgeVariant(selectedLog.result)}>
                 {selectedLog.result}
@@ -376,8 +469,8 @@ const AuditLogs = () => {
                 
                 {/* Step 1: User */}
                 <div className="flex items-center gap-3 w-64 bg-white border border-gray-200 shadow-sm p-2 rounded justify-center">
-                  <User size={16} className={selectedLog.role === 'Admin' ? 'text-red-500' : 'text-blue-500'} />
-                  <span className="font-semibold text-gray-800">{selectedLog.userName} <span className="text-xs font-normal text-gray-500">({selectedLog.role})</span></span>
+                  <User size={16} className={(selectedLog.role || selectedLog.userId?.role) === 'admin' ? 'text-red-500' : 'text-blue-500'} />
+                  <span className="font-semibold text-gray-800">{selectedLog.userName || selectedLog.userId?.name || 'System'} <span className="text-xs font-normal text-gray-500">({(selectedLog.role || selectedLog.userId?.role || 'system').toUpperCase()})</span></span>
                 </div>
                 
                 <ArrowDown size={16} className="text-gray-300" />
@@ -412,17 +505,17 @@ const AuditLogs = () => {
               <div className="space-y-3">
                 <div className="flex flex-col">
                   <span className="text-gray-500 flex items-center gap-1 mb-1"><Clock size={14} /> Timestamp</span>
-                  <span className="font-medium text-gray-900">{new Date(selectedLog.dateTime).toLocaleString()}</span>
+                  <span className="font-medium text-gray-900">{formatDateTime(selectedLog.createdAt)}</span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-gray-500 flex items-center gap-1 mb-1"><User size={14} /> User ID</span>
-                  <span className="font-medium text-gray-900">{selectedLog.userId}</span>
+                  <span className="font-medium text-gray-900">{selectedLog.userId?.userId || 'SYS'}</span>
                 </div>
               </div>
               <div className="space-y-3">
                 <div className="flex flex-col">
                   <span className="text-gray-500 flex items-center gap-1 mb-1"><MapPin size={14} /> Village Context</span>
-                  <span className="font-medium text-gray-900">{selectedLog.village}</span>
+                  <span className="font-medium text-gray-900">{selectedLog.village || 'N/A'}</span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-gray-500 flex items-center gap-1 mb-1"><Info size={14} /> Related Record ID</span>

@@ -13,10 +13,11 @@ import {
 import { 
   mockNotifications, notificationTypes, priorityLevels, statusOptions 
 } from '../../data/mockNotifications';
-import { villagesList } from '../../data/mockUsers';
+import api from '../../services/api';
 
 const Notifications = () => {
   const [notifications, setNotifications] = useState([]);
+  const [villages, setVillages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -34,20 +35,35 @@ const Notifications = () => {
   
   const [selectedNotification, setSelectedNotification] = useState(null);
 
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const [notifRes, villagesRes] = await Promise.all([
+        api.get('/notifications?limit=100'),
+        api.get('/villages?limit=100')
+      ]);
+      setVillages(villagesRes.data);
+      const mapped = notifRes.data.map(n => ({
+        id: n._id.toString(),
+        title: n.title,
+        message: n.message,
+        type: n.type === 'danger' ? 'Complaint' : n.type === 'warning' ? 'Water Quality' : 'System',
+        priority: n.type === 'danger' ? 'High' : 'Medium',
+        status: n.isRead ? 'Read' : 'Unread',
+        village: 'All Villages',
+        date: n.createdAt ? n.createdAt.split('T')[0] : '',
+        createdAt: n.createdAt
+      }));
+      setNotifications(mapped);
+      setError(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch notifications.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchNotifications = async () => {
-      try {
-        setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-        setNotifications(mockNotifications);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch notifications.');
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchNotifications();
   }, []);
 
@@ -89,20 +105,28 @@ const Notifications = () => {
     setIsViewModalOpen(true);
   };
 
-  const handleMarkAsRead = (id) => {
-    setNotifications(notifications.map(n => 
-      n.id === id ? { ...n, status: 'Read', lastUpdated: new Date().toISOString() } : n
-    ));
-    
-    // Also update selected if it's currently open
-    if (selectedNotification && selectedNotification.id === id) {
-      setSelectedNotification({ ...selectedNotification, status: 'Read' });
+  const handleMarkAsRead = async (id) => {
+    try {
+      await api.patch(`/notifications/${id}/read`);
+      fetchNotifications();
+      
+      // Also update selected if it's currently open
+      if (selectedNotification && selectedNotification.id === id) {
+        setSelectedNotification({ ...selectedNotification, status: 'Read' });
+      }
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to mark notification as read.');
     }
   };
 
-  const handleMarkAllAsReadConfirm = () => {
-    setNotifications(notifications.map(n => ({ ...n, status: 'Read', lastUpdated: new Date().toISOString() })));
-    setIsMarkAllModalOpen(false);
+  const handleMarkAllAsReadConfirm = async () => {
+    try {
+      await api.patch('/notifications/read-all');
+      setIsMarkAllModalOpen(false);
+      fetchNotifications();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to mark all notifications as read.');
+    }
   };
 
   const handleDeleteConfirm = () => {
@@ -334,7 +358,7 @@ const Notifications = () => {
               />
 
               <Select
-                options={[{ label: 'All Villages', value: '' }, ...villagesList.map(v => ({ label: v, value: v }))]}
+                options={[{ label: 'All Villages', value: '' }, ...villages.map(v => ({ label: v.name, value: v.name }))]}
                 value={villageFilter}
                 onChange={(e) => setVillageFilter(e.target.value)}
               />

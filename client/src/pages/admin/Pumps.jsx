@@ -8,13 +8,15 @@ import Table from '../../components/ui/Table';
 import Modal from '../../components/ui/Modal';
 import { Search, Edit2, AlertCircle, Eye, Wrench, Settings, XCircle, Slash, RefreshCw, ClipboardList, Calendar, MapPin, CheckCircle, Activity } from 'lucide-react';
 import { mockPumps, pumpTypes } from '../../data/mockPumps';
-import { villagesList } from '../../data/mockUsers';
 import { operatorsList } from '../../data/mockVillages';
+import api from '../../services/api';
 
 const Pumps = () => {
   const [pumps, setPumps] = useState([]);
+  const [villages, setVillages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Filters and Search
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,22 +39,36 @@ const Pumps = () => {
     operator: ''
   });
 
-  // Fetch pumps (mock API call)
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+      const [pumpsRes, villagesRes] = await Promise.all([
+        api.get('/pumps?limit=100'),
+        api.get('/villages?limit=100')
+      ]);
+      setVillages(villagesRes.data);
+      const mapped = pumpsRes.data.map(p => ({
+        id: p._id.toString(),
+        name: p.name,
+        village: p.village?.name || 'Unknown',
+        villageId: p.village?._id || '',
+        pumpType: p.type || 'Submersible',
+        installationDate: p.installationDate ? p.installationDate.split('T')[0] : '',
+        lastMaintenance: p.lastMaintenanceDate ? p.lastMaintenanceDate.split('T')[0] : 'None',
+        status: p.status,
+        operator: p.operator || 'Unassigned'
+      }));
+      setPumps(mapped);
+      setError(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch pumps.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchPumps = async () => {
-      try {
-        setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 600));
-        setPumps(mockPumps);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch pumps. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchPumps();
+    fetchRecords();
   }, []);
 
   // Filtered Pumps
@@ -105,17 +121,29 @@ const Pumps = () => {
     setIsViewModalOpen(true);
   };
 
-  const handleFormSubmit = (e) => {
+  const handleFormSubmit = async (e) => {
     e.preventDefault();
-    if (selectedPump) {
-      // Edit
-      setPumps(pumps.map(p => p.id === selectedPump.id ? { 
-        ...p, 
-        ...formData,
-        lastUpdated: new Date().toISOString()
-      } : p));
+    setIsSaving(true);
+    try {
+      const vDoc = villages.find(v => v.name === formData.village);
+      if (!vDoc) throw new Error('Selected village name is invalid.');
+
+      const payload = {
+        name: formData.name,
+        village: vDoc._id,
+        type: formData.pumpType,
+        installationDate: formData.installationDate,
+        status: formData.status
+      };
+
+      await api.put(`/pumps/${selectedPump.id}`, payload);
+      setIsFormModalOpen(false);
+      fetchRecords();
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || 'Failed to update pump details.');
+    } finally {
+      setIsSaving(false);
     }
-    setIsFormModalOpen(false);
   };
 
   const getStatusBadgeVariant = (status) => {
@@ -218,7 +246,7 @@ const Pumps = () => {
           <Select
             options={[
               { label: 'All Villages', value: '' },
-              ...villagesList.map(v => ({ label: v, value: v }))
+              ...villages.map(v => ({ label: v.name, value: v.name }))
             ]}
             value={villageFilter}
             onChange={(e) => setVillageFilter(e.target.value)}
@@ -282,7 +310,7 @@ const Pumps = () => {
             required
             options={[
               { label: 'Select Village...', value: '' },
-              ...villagesList.map(v => ({ label: v, value: v }))
+              ...villages.map(v => ({ label: v.name, value: v.name }))
             ]}
             value={formData.village}
             onChange={(e) => setFormData({...formData, village: e.target.value})}
@@ -328,7 +356,9 @@ const Pumps = () => {
           />
           <div className="pt-4 flex justify-end gap-3 border-t">
             <Button variant="outline" type="button" onClick={() => setIsFormModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Save Changes</Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? 'Saving...' : 'Save'}
+            </Button>
           </div>
         </form>
       </Modal>

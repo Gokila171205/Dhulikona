@@ -7,22 +7,27 @@ import Select from '../../components/ui/Select';
 import Table from '../../components/ui/Table';
 import Modal from '../../components/ui/Modal';
 import PieChart from '../../components/charts/PieChart';
-import BarChart from '../../components/charts/BarChart';
-import { Search, Edit2, AlertCircle, Eye, RefreshCw, AlertTriangle, Clock, MapPin, User, Calendar, MessageSquare, ArrowRight } from 'lucide-react';
-import { mockComplaints, complaintCategories, complaintPriorities, complaintStatuses, OVERDUE_THRESHOLD_DAYS } from '../../data/mockComplaints';
-import { villagesList } from '../../data/mockUsers';
-import { operatorsList } from '../../data/mockVillages';
+import { Search, Edit2, AlertCircle, Eye, RefreshCw, AlertTriangle, Clock, MapPin, User, MessageSquare } from 'lucide-react';
+import { complaintStatuses, OVERDUE_THRESHOLD_DAYS } from '../../data/mockComplaints';
+import api from '../../services/api';
 
 const Complaints = () => {
   const [complaints, setComplaints] = useState([]);
+  const [villages, setVillages] = useState([]);
+  const [operators, setOperators] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const limit = 10;
 
   // Filters and Search
   const [searchTerm, setSearchTerm] = useState('');
   const [villageFilter, setVillageFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [operatorFilter, setOperatorFilter] = useState('');
   const [dateFilter, setDateFilter] = useState('');
@@ -36,23 +41,116 @@ const Complaints = () => {
   const [newStatus, setNewStatus] = useState('');
   const [resolutionRemarks, setResolutionRemarks] = useState('');
 
-  // Fetch records
-  useEffect(() => {
-    const fetchRecords = async () => {
-      try {
-        setLoading(true);
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 600));
-        setComplaints(mockComplaints);
-        setError(null);
-      } catch (err) {
-        setError('Failed to fetch complaints. Please try again.');
-      } finally {
-        setLoading(false);
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    const day = date.getDate();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'AM' : 'PM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${day} ${month} ${year} · ${hours}:${minutes} ${ampm}`;
+  };
+
+  const mapBackendStatus = (status) => {
+    switch (status) {
+      case 'Submitted': return 'New';
+      case 'Verified': return 'New';
+      case 'Maintenance Started': return 'In Progress';
+      case 'Resolved': return 'Resolved';
+      case 'Confirmed': return 'Closed';
+      default: return status;
+    }
+  };
+
+  const mapFrontendStatusToBackend = (status) => {
+    switch (status) {
+      case 'New': return 'Submitted';
+      case 'In Progress': return 'Maintenance Started';
+      case 'Resolved': return 'Resolved';
+      case 'Closed': return 'Confirmed';
+      default: return status;
+    }
+  };
+
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+
+      let villageId = '';
+      if (villageFilter) {
+        const vDoc = villages.find(v => v.name === villageFilter);
+        if (vDoc) villageId = vDoc._id;
       }
-    };
+
+      let backendStatus = '';
+      if (statusFilter) {
+        backendStatus = mapFrontendStatusToBackend(statusFilter);
+      }
+
+      const params = {
+        page,
+        limit
+      };
+      if (searchTerm) params.search = searchTerm;
+      if (backendStatus) params.status = backendStatus;
+      if (villageId) params.village = villageId;
+
+      const [complaintsRes, villagesRes, operatorsRes] = await Promise.all([
+        api.get('/complaints', { params }),
+        api.get('/villages?limit=100'),
+        api.get('/users?role=operator&limit=100')
+      ]);
+
+      setVillages(villagesRes.data);
+      setOperators(operatorsRes.data);
+      
+      const resData = complaintsRes.data || [];
+      const paginationData = complaintsRes.pagination || { page: 1, totalPages: 1, total: resData.length };
+
+      const mapped = resData.map(c => ({
+        id: c._id.toString(),
+        subject: c.title,
+        description: c.description,
+        village: c.village?.name || 'Unknown',
+        villageId: c.village?._id || '',
+        villagerName: c.reportedBy?.name || 'Villager',
+        villagerPhone: c.reportedBy?.phone || '',
+        assignedOperator: c.assignedTo?.name || 'Unassigned',
+        operatorId: c.assignedTo?._id || '',
+        status: mapBackendStatus(c.status),
+        submittedDate: c.createdAt ? formatDateTime(c.createdAt) : '',
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt,
+        resolvedAt: c.resolvedAt,
+        confirmedAt: c.confirmedAt
+      }));
+      setComplaints(mapped);
+      setTotalPages(paginationData.totalPages);
+      setTotal(paginationData.total);
+      setError(null);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to fetch complaints.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (page !== 1) {
+      setPage(1);
+    } else {
+      fetchRecords();
+    }
+  }, [searchTerm, villageFilter, statusFilter]);
+
+  useEffect(() => {
     fetchRecords();
-  }, []);
+  }, [page]);
 
   const getDaysOld = (dateString) => {
     const today = new Date('2026-08-13T00:00:00Z'); // Mock today matching context
@@ -76,13 +174,11 @@ const Complaints = () => {
       c.subject.toLowerCase().includes(searchLower);
     
     const matchesVillage = villageFilter ? c.village === villageFilter : true;
-    const matchesCategory = categoryFilter ? c.category === categoryFilter : true;
-    const matchesPriority = priorityFilter ? c.priority === priorityFilter : true;
     const matchesStatus = statusFilter ? c.status === statusFilter : true;
     const matchesOperator = operatorFilter ? c.assignedOperator === operatorFilter : true;
-    const matchesDate = dateFilter ? c.submittedDate === dateFilter : true;
+    const matchesDate = dateFilter ? new Date(c.createdAt).toISOString().split('T')[0] === dateFilter : true;
 
-    return matchesSearch && matchesVillage && matchesCategory && matchesPriority && matchesStatus && matchesOperator && matchesDate;
+    return matchesSearch && matchesVillage && matchesStatus && matchesOperator && matchesDate;
   });
 
   // Summary Calculations
@@ -99,17 +195,10 @@ const Complaints = () => {
     value: complaints.filter(c => c.status === status).length
   })).filter(d => d.value > 0);
 
-  const priorityData = complaintPriorities.map(priority => ({
-    name: priority,
-    value: complaints.filter(c => c.priority === priority).length
-  })).filter(d => d.value > 0);
-
   // Handlers
   const handleClearFilters = () => {
     setSearchTerm('');
     setVillageFilter('');
-    setCategoryFilter('');
-    setPriorityFilter('');
     setStatusFilter('');
     setOperatorFilter('');
     setDateFilter('');
@@ -127,24 +216,22 @@ const Complaints = () => {
     setIsStatusModalOpen(true);
   };
 
-  const handleStatusSubmit = (e) => {
+  const handleStatusSubmit = async (e) => {
     e.preventDefault();
-    if (selectedComplaint) {
-      setComplaints(complaints.map(c => {
-        if (c.id === selectedComplaint.id) {
-          const isResolvingOrClosing = newStatus === 'Resolved' || newStatus === 'Closed';
-          return { 
-            ...c, 
-            status: newStatus,
-            resolutionRemarks: isResolvingOrClosing ? resolutionRemarks : c.resolutionRemarks,
-            resolvedAt: (isResolvingOrClosing && !c.resolvedAt) ? new Date().toISOString() : c.resolvedAt,
-            updatedAt: new Date().toISOString()
-          };
-        }
-        return c;
-      }));
+    setIsSaving(true);
+    try {
+      const payload = {
+        status: mapFrontendStatusToBackend(newStatus),
+        remarks: resolutionRemarks
+      };
+      await api.patch(`/complaints/${selectedComplaint.id}/status`, payload);
+      setIsStatusModalOpen(false);
+      fetchRecords();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update complaint status.');
+    } finally {
+      setIsSaving(false);
     }
-    setIsStatusModalOpen(false);
   };
 
   const getStatusBadgeVariant = (status) => {
@@ -158,31 +245,11 @@ const Complaints = () => {
     }
   };
 
-  const getPriorityBadgeVariant = (priority) => {
-    switch (priority) {
-      case 'Low': return 'default';
-      case 'Medium': return 'primary';
-      case 'High': return 'warning';
-      case 'Critical': return 'danger';
-      default: return 'default';
-    }
-  };
-
   const columns = [
     { header: 'ID', accessor: 'id' },
     { header: 'Date', accessor: 'submittedDate' },
     { header: 'Villager', accessor: 'villagerName' },
     { header: 'Village', accessor: 'village' },
-    { header: 'Category', accessor: 'category' },
-    { 
-      header: 'Priority', 
-      accessor: 'priority',
-      render: (row) => (
-        <Badge variant={getPriorityBadgeVariant(row.priority)}>
-          {row.priority}
-        </Badge>
-      )
-    },
     { header: 'Operator', accessor: 'assignedOperator' },
     { 
       header: 'Status', 
@@ -270,7 +337,7 @@ const Complaints = () => {
       </div>
 
       {/* Analytics Charts & Needs Attention */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="p-4">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">Complaints by Status</h3>
           <div className="h-48 flex items-center justify-center">
@@ -280,26 +347,15 @@ const Complaints = () => {
              />
           </div>
         </Card>
-        <Card className="p-4">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Complaints by Priority</h3>
-          <div className="h-48 flex items-center justify-center">
-             <BarChart 
-                data={priorityData}
-                xKey="name"
-                yKey="value"
-                colors={['#9ca3af', '#3b82f6', '#f59e0b', '#ef4444']}
-             />
-          </div>
-        </Card>
         <Card className="p-4 bg-red-50/50 border-red-100 flex flex-col">
           <h3 className="text-lg font-semibold text-red-800 mb-3 flex items-center gap-2">
             <AlertTriangle size={18} /> Needs Attention
           </h3>
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
-            {complaints.filter(c => isOverdue(c) || c.priority === 'Critical').length === 0 ? (
-              <p className="text-gray-500 text-sm italic">No critical or overdue complaints.</p>
+            {complaints.filter(c => isOverdue(c)).length === 0 ? (
+              <p className="text-gray-500 text-sm italic">No overdue complaints.</p>
             ) : (
-              complaints.filter(c => isOverdue(c) || c.priority === 'Critical').map(c => (
+              complaints.filter(c => isOverdue(c)).map(c => (
                 <div key={c.id} className="bg-white p-3 border rounded shadow-sm">
                   <div className="flex justify-between items-start mb-1">
                     <span className="font-semibold text-gray-900 text-sm">{c.id}</span>
@@ -316,8 +372,8 @@ const Complaints = () => {
 
       {/* Filters and Search */}
       <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-4 items-end">
-          <div className="relative xl:col-span-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+          <div className="relative lg:col-span-2">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={16} className="text-gray-400" />
             </div>
@@ -330,21 +386,12 @@ const Complaints = () => {
           </div>
           
           <Select
-            options={[{ label: 'All Villages', value: '' }, ...villagesList.map(v => ({ label: v, value: v }))]}
+            options={[
+              { label: 'All Villages', value: '' },
+              ...villages.map(v => ({ label: v.name, value: v.name }))
+            ]}
             value={villageFilter}
             onChange={(e) => setVillageFilter(e.target.value)}
-          />
-
-          <Select
-            options={[{ label: 'All Categories', value: '' }, ...complaintCategories.map(c => ({ label: c, value: c }))]}
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-          />
-
-          <Select
-            options={[{ label: 'All Priorities', value: '' }, ...complaintPriorities.map(p => ({ label: p, value: p }))]}
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
           />
 
           <Select
@@ -354,7 +401,10 @@ const Complaints = () => {
           />
 
           <Select
-            options={[{ label: 'All Operators', value: '' }, ...operatorsList.map(o => ({ label: o.name, value: o.name }))]}
+            options={[
+              { label: 'All Operators', value: '' },
+              ...operators.map(o => ({ label: o.name, value: o.name }))
+            ]}
             value={operatorFilter}
             onChange={(e) => setOperatorFilter(e.target.value)}
           />
@@ -370,7 +420,7 @@ const Complaints = () => {
             />
           </div>
           {/* Clear Filters Button */}
-          {(searchTerm || villageFilter || categoryFilter || priorityFilter || statusFilter || operatorFilter || dateFilter) && (
+          {(searchTerm || villageFilter || statusFilter || operatorFilter || dateFilter) && (
             <button 
               onClick={handleClearFilters}
               className="text-sm text-gov-blue hover:underline flex items-center gap-1 font-medium pb-2"
@@ -384,6 +434,53 @@ const Complaints = () => {
       {/* Table */}
       <Card className="overflow-hidden">
         <Table columns={columns} data={filteredComplaints} keyExtractor={row => row.id} />
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
+            <div className="flex flex-1 justify-between sm:hidden">
+              <Button
+                variant="outline"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+            <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-gray-700">
+                  Showing page <span className="font-medium">{page}</span> of{' '}
+                  <span className="font-medium">{totalPages}</span> (Total{' '}
+                  <span className="font-medium">{total}</span> complaints)
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-2 py-1 text-xs"
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="px-2 py-1 text-xs"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Status Update Confirmation Modal */}
@@ -422,7 +519,9 @@ const Complaints = () => {
 
           <div className="pt-4 flex justify-end gap-3 border-t">
             <Button variant="outline" type="button" onClick={() => setIsStatusModalOpen(false)}>Cancel</Button>
-            <Button type="submit">Confirm Update</Button>
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? 'Updating...' : 'Update Status'}
+            </Button>
           </div>
         </form>
       </Modal>
@@ -443,9 +542,6 @@ const Complaints = () => {
                 <p className="text-sm text-gray-500 mt-1">ID: {selectedComplaint.id}</p>
               </div>
               <div className="flex gap-2">
-                <Badge variant={getPriorityBadgeVariant(selectedComplaint.priority)}>
-                  Priority: {selectedComplaint.priority}
-                </Badge>
                 <Badge variant={getStatusBadgeVariant(selectedComplaint.status)}>
                   {selectedComplaint.status}
                 </Badge>
@@ -477,12 +573,12 @@ const Complaints = () => {
                     <span className="font-medium text-gray-900">{selectedComplaint.village}</span>
                   </div>
                   <div className="flex flex-col border-b border-dashed pb-1">
-                    <span className="text-gray-500 mb-1">Category</span>
-                    <span className="font-medium text-gray-900">{selectedComplaint.category}</span>
-                  </div>
-                  <div className="flex flex-col border-b border-dashed pb-1">
                     <span className="text-gray-500 mb-1">Assigned Operator</span>
                     <span className="font-medium text-gov-blue">{selectedComplaint.assignedOperator}</span>
+                  </div>
+                  <div className="flex flex-col border-b border-dashed pb-1">
+                    <span className="text-gray-500 mb-1">Updated Date</span>
+                    <span className="font-medium text-gray-900">{selectedComplaint.updatedAt ? formatDateTime(selectedComplaint.updatedAt) : 'N/A'}</span>
                   </div>
                 </div>
 
@@ -503,7 +599,7 @@ const Complaints = () => {
                   <div className="relative pl-6">
                     <div className="absolute w-3 h-3 bg-gov-blue rounded-full -left-[7px] top-1.5 border-2 border-white"></div>
                     <p className="text-sm font-medium text-gray-900">Submitted</p>
-                    <p className="text-xs text-gray-500">{new Date(selectedComplaint.createdAt).toLocaleString()}</p>
+                    <p className="text-xs text-gray-500">{formatDateTime(selectedComplaint.createdAt)}</p>
                   </div>
                   
                   {/* Assigned / In Progress */}
@@ -520,7 +616,7 @@ const Complaints = () => {
                     <div className="relative pl-6">
                       <div className="absolute w-3 h-3 bg-green-500 rounded-full -left-[7px] top-1.5 border-2 border-white"></div>
                       <p className="text-sm font-medium text-gray-900">Resolved</p>
-                      <p className="text-xs text-gray-500">{selectedComplaint.resolvedAt ? new Date(selectedComplaint.resolvedAt).toLocaleString() : 'Date unavailable'}</p>
+                      <p className="text-xs text-gray-500">{selectedComplaint.resolvedAt ? formatDateTime(selectedComplaint.resolvedAt) : 'Date unavailable'}</p>
                     </div>
                   )}
 
@@ -529,7 +625,7 @@ const Complaints = () => {
                     <div className="relative pl-6">
                       <div className="absolute w-3 h-3 bg-gray-500 rounded-full -left-[7px] top-1.5 border-2 border-white"></div>
                       <p className="text-sm font-medium text-gray-900">Closed</p>
-                      <p className="text-xs text-gray-500">Verified by Admin</p>
+                      <p className="text-xs text-gray-500">{selectedComplaint.confirmedAt ? formatDateTime(selectedComplaint.confirmedAt) : 'Date unavailable'}</p>
                     </div>
                   )}
                 </div>
