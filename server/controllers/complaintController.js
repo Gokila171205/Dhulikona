@@ -17,7 +17,7 @@ const getComplaints = async (req, res) => {
   }
 };
 
-// Get a single complaint
+// Get a single complaint by ID
 const getComplaintById = async (req, res) => {
   try {
     const complaint = await Complaint.findById(req.params.id)
@@ -46,6 +46,8 @@ const createComplaint = async (req, res) => {
     const {
       title,
       description,
+      location,
+      date,
       village,
       reportedBy
     } = req.body;
@@ -53,6 +55,8 @@ const createComplaint = async (req, res) => {
     const complaint = await Complaint.create({
       title,
       description,
+      location,
+      date,
       village,
       reportedBy
     });

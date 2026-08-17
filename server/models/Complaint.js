@@ -12,6 +12,16 @@ const complaintSchema = new mongoose.Schema(
       required: true
     },
 
+    location: {
+      type: String,
+      default: ''
+    },
+
+    date: {
+      type: Date,
+      default: Date.now
+    },
+
     village: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Village',
