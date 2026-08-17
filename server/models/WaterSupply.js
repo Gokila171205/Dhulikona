@@ -2,12 +2,6 @@ const mongoose = require('mongoose');
 
 const waterSupplySchema = new mongoose.Schema(
   {
-    village: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Village',
-      required: true
-    },
-
     date: {
       type: Date,
       required: true
@@ -23,15 +17,25 @@ const waterSupplySchema = new mongoose.Schema(
       required: true
     },
 
-    duration: {
+    area: {
+      type: String,
+      required: true
+    },
+
+    pump: {
       type: String,
       required: true
     },
 
     status: {
       type: String,
-      enum: ['Scheduled', 'Completed', 'Cancelled'],
+      enum: ['Scheduled', 'Completed', 'Cancelled', 'In Progress'],
       default: 'Scheduled'
+    },
+
+    remarks: {
+      type: String,
+      default: ''
     }
   },
   {

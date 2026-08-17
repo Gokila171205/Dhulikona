@@ -23,11 +23,9 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Complaint routes
+// Routes
 app.use('/api/complaints', complaintRoutes);
-
-// Water Supply routes
-app.use('/api/water-supply', waterSupplyRoutes);
+app.use('/api/water-supplies', waterSupplyRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

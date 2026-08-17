@@ -1,75 +1,75 @@
 import { useEffect, useState } from "react";
 
 const WaterSupply = () => {
-  const [supplyRecords, setSupplyRecords] = useState([]);
-  const [todaySupply, setTodaySupply] = useState(null);
+  const [supplies, setSupplies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchWaterSupply = async () => {
+    const fetchWaterSupplies = async () => {
       try {
-        // Fetch supply history
-        const historyResponse = await fetch(
-          "http://localhost:5000/api/water-supply"
+        const response = await fetch(
+          "http://localhost:5000/api/water-supplies"
         );
 
-        const historyData = await historyResponse.json();
+        const data = await response.json();
 
-        if (!historyResponse.ok) {
+        if (!response.ok) {
           throw new Error(
-            historyData.error || "Failed to fetch water supply"
+            data.error ||
+              data.message ||
+              "Failed to fetch water supply records"
           );
         }
 
-        setSupplyRecords(historyData);
-
-        // Fetch today's supply
-        const todayResponse = await fetch(
-          "http://localhost:5000/api/water-supply/today"
-        );
-
-        const todayData = await todayResponse.json();
-
-        if (!todayResponse.ok) {
-          throw new Error(
-            todayData.error || "Failed to fetch today's supply"
-          );
-        }
-
-        setTodaySupply(todayData);
+        setSupplies(data);
       } catch (err) {
-        console.error("Error fetching water supply:", err);
+        console.error("Error fetching water supplies:", err);
         setError(err.message);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchWaterSupply();
+    fetchWaterSupplies();
   }, []);
 
-  // Loading
-  if (loading) {
-    return (
-      <div className="p-6 text-slate-600">
-        Loading water supply information...
-      </div>
-    );
-  }
+  // Latest water supply record
+  const todaySupply = supplies.length > 0 ? supplies[0] : null;
 
-  // Error
-  if (error) {
-    return (
-      <div className="p-6 text-red-600">
-        Failed to fetch water supply: {error}
-      </div>
-    );
-  }
+  const formatDate = (date) => {
+    if (!date) return "N/A";
+
+    return new Date(date).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const getStatusStyle = (status) => {
+    switch (status) {
+      case "Scheduled":
+        return "bg-blue-100 text-blue-700";
+
+      case "Completed":
+        return "bg-green-100 text-green-700";
+
+      case "Cancelled":
+        return "bg-red-100 text-red-700";
+
+      case "In Progress":
+        return "bg-orange-100 text-orange-700";
+
+      default:
+        return "bg-slate-100 text-slate-700";
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+
+      {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900">
           Water Supply
@@ -80,60 +80,99 @@ const WaterSupply = () => {
         </p>
       </div>
 
-      {/* Today's Water Supply */}
+      {/* Error */}
+      {error && (
+        <div className="rounded-lg bg-red-50 p-4 text-sm text-red-600">
+          Failed to fetch water supply:
+          <span className="ml-1">{error}</span>
+        </div>
+      )}
+
+      {/* Today's / Latest Water Supply */}
       <div className="rounded-xl border border-teal-100 bg-teal-50 p-6">
+
         <p className="text-sm font-medium text-teal-700">
-          Today's Water Supply
+          Latest Water Supply
         </p>
 
-        {todaySupply ? (
+        {loading ? (
+          <p className="mt-3 text-sm text-slate-500">
+            Loading water supply...
+          </p>
+        ) : !todaySupply ? (
+          <div className="mt-3">
+            <h2 className="text-xl font-bold text-slate-900">
+              No water supply records
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-600">
+              Water supply schedules will appear here when they are added.
+            </p>
+          </div>
+        ) : (
           <div className="mt-3 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+
             <div>
               <h2 className="text-2xl font-bold text-slate-900">
                 {todaySupply.startTime} – {todaySupply.endTime}
               </h2>
 
               <p className="mt-1 text-sm text-slate-600">
-                {todaySupply.village?.name || "Village not available"}
+                {todaySupply.area}
+              </p>
+
+              <p className="mt-1 text-xs text-slate-500">
+                {formatDate(todaySupply.date)}
               </p>
             </div>
 
             <span
-              className={`w-fit rounded-full px-4 py-2 text-sm font-medium ${
-                todaySupply.status === "Scheduled"
-                  ? "bg-blue-100 text-blue-700"
-                  : todaySupply.status === "Completed"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-red-100 text-red-700"
-              }`}
+              className={`w-fit rounded-full px-4 py-2 text-sm font-medium ${getStatusStyle(
+                todaySupply.status
+              )}`}
             >
               {todaySupply.status}
             </span>
+
           </div>
-        ) : (
-          <p className="mt-3 text-sm text-slate-600">
-            No water supply scheduled for today.
-          </p>
         )}
       </div>
 
       {/* Supply History */}
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+
         <h2 className="text-lg font-semibold text-slate-900">
           Supply History
         </h2>
 
-        {supplyRecords.length === 0 ? (
-          <p className="mt-5 text-sm text-slate-500">
-            No water supply records available.
-          </p>
-        ) : (
-          <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[600px] text-left text-sm">
+        <div className="mt-5 overflow-x-auto">
+
+          {loading ? (
+            <p className="py-6 text-center text-sm text-slate-500">
+              Loading supply history...
+            </p>
+          ) : supplies.length === 0 ? (
+            <div className="rounded-lg bg-slate-50 p-6 text-center">
+              <p className="font-medium text-slate-700">
+                No supply records found
+              </p>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Records will appear here when water supply is scheduled.
+              </p>
+            </div>
+          ) : (
+            <table className="w-full min-w-[750px] text-left text-sm">
+
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
+
                   <th className="px-4 py-3 font-semibold text-slate-700">
                     Date
+                  </th>
+
+                  <th className="px-4 py-3 font-semibold text-slate-700">
+                    Area
                   </th>
 
                   <th className="px-4 py-3 font-semibold text-slate-700">
@@ -141,60 +180,70 @@ const WaterSupply = () => {
                   </th>
 
                   <th className="px-4 py-3 font-semibold text-slate-700">
-                    Duration
+                    Pump
                   </th>
 
                   <th className="px-4 py-3 font-semibold text-slate-700">
                     Status
                   </th>
+
+                  <th className="px-4 py-3 font-semibold text-slate-700">
+                    Remarks
+                  </th>
+
                 </tr>
               </thead>
 
               <tbody>
-                {supplyRecords.map((record) => (
+
+                {supplies.map((supply) => (
                   <tr
-                    key={record._id}
+                    key={supply._id}
                     className="border-b border-slate-100 hover:bg-slate-50"
                   >
+
                     <td className="px-4 py-4 text-slate-900">
-                      {new Date(record.date).toLocaleDateString(
-                        "en-IN",
-                        {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        }
-                      )}
+                      {formatDate(supply.date)}
+                    </td>
+
+                    <td className="px-4 py-4 font-medium text-slate-900">
+                      {supply.area}
                     </td>
 
                     <td className="px-4 py-4 text-slate-600">
-                      {record.startTime} – {record.endTime}
+                      {supply.startTime} – {supply.endTime}
                     </td>
 
                     <td className="px-4 py-4 text-slate-600">
-                      {record.duration}
+                      {supply.pump}
                     </td>
 
                     <td className="px-4 py-4">
+
                       <span
-                        className={`rounded-full px-3 py-1 text-xs font-medium ${
-                          record.status === "Scheduled"
-                            ? "bg-blue-100 text-blue-700"
-                            : record.status === "Completed"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusStyle(
+                          supply.status
+                        )}`}
                       >
-                        {record.status}
+                        {supply.status}
                       </span>
+
                     </td>
+
+                    <td className="px-4 py-4 text-slate-600">
+                      {supply.remarks || "—"}
+                    </td>
+
                   </tr>
                 ))}
+
               </tbody>
             </table>
-          </div>
-        )}
+          )}
+
+        </div>
       </div>
+
     </div>
   );
 };
