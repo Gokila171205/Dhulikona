@@ -7,6 +7,7 @@ const waterQualityRoutes = require('./routes/waterQuality');
 const complaintRoutes = require('./routes/complaints');
 const pumpRoutes = require('./routes/pumps');
 const maintenanceRoutes = require('./routes/maintenance');
+const chargeRoutes = require('./routes/charges');
 
 const app = express();
 
@@ -34,3 +35,4 @@ app.use('/api/water-quality', waterQualityRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/pumps', pumpRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/charges', chargeRoutes);

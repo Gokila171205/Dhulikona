@@ -1,50 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle,
   IndianRupee,
   Search,
-  Clock,
-  AlertCircle,
 } from 'lucide-react';
-
-const initialHouseholds = [
-  {
-    id: 1,
-    household: 'HH-001',
-    head: 'Ramesh Das',
-    members: 5,
-    amount: 100,
-    dueDate: '2026-08-15',
-    status: 'Paid',
-  },
-  {
-    id: 2,
-    household: 'HH-002',
-    head: 'Anita Das',
-    members: 4,
-    amount: 100,
-    dueDate: '2026-08-15',
-    status: 'Pending',
-  },
-  {
-    id: 3,
-    household: 'HH-003',
-    head: 'Mina Devi',
-    members: 6,
-    amount: 100,
-    dueDate: '2026-08-15',
-    status: 'Overdue',
-  },
-  {
-    id: 4,
-    household: 'HH-004',
-    head: 'Rahul Das',
-    members: 3,
-    amount: 100,
-    dueDate: '2026-08-15',
-    status: 'Paid',
-  },
-];
+import api from '../../api/axios';
 
 const statusStyles = {
   Paid: 'bg-green-50 text-green-700',
@@ -53,9 +13,26 @@ const statusStyles = {
 };
 
 const Charges = () => {
-  const [households, setHouseholds] = useState(initialHouseholds);
+  const [households, setHouseholds] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+
+  useEffect(() => {
+    fetchCharges();
+  }, []);
+
+  const fetchCharges = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/charges');
+      setHouseholds(res.data);
+    } catch (err) {
+      console.error('Failed to fetch charges:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredHouseholds = useMemo(() => {
     return households.filter((household) => {
@@ -66,37 +43,33 @@ const Charges = () => {
         household.head.toLowerCase().includes(text);
 
       const matchesStatus =
-        statusFilter === 'All' ||
-        household.status === statusFilter;
+        statusFilter === 'All' || household.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
   }, [households, search, statusFilter]);
 
-  const paidCount = households.filter(
-    (h) => h.status === 'Paid'
-  ).length;
-
-  const pendingCount = households.filter(
-    (h) => h.status === 'Pending'
-  ).length;
-
-  const overdueCount = households.filter(
-    (h) => h.status === 'Overdue'
-  ).length;
+  const paidCount = households.filter((h) => h.status === 'Paid').length;
+  const pendingCount = households.filter((h) => h.status === 'Pending').length;
+  const overdueCount = households.filter((h) => h.status === 'Overdue').length;
 
   const totalCollected = households
     .filter((h) => h.status === 'Paid')
     .reduce((total, h) => total + h.amount, 0);
 
-  const markPaid = (id) => {
-    setHouseholds((previous) =>
-      previous.map((household) =>
-        household.id === id
-          ? { ...household, status: 'Paid' }
-          : household
-      )
-    );
+  const markPaid = async (id) => {
+    try {
+      const res = await api.patch(`/charges/${id}/pay`);
+
+      setHouseholds((previous) =>
+        previous.map((household) =>
+          household._id === id ? res.data : household
+        )
+      );
+    } catch (err) {
+      console.error('Failed to mark as paid:', err);
+      alert('Something went wrong while updating payment status.');
+    }
   };
 
   return (
@@ -132,10 +105,7 @@ const Charges = () => {
             </div>
 
             <div className="rounded-lg bg-[#E0F2FE] p-2.5">
-              <IndianRupee
-                size={20}
-                className="text-[#0284C7]"
-              />
+              <IndianRupee size={20} className="text-[#0284C7]" />
             </div>
 
           </div>
@@ -265,72 +235,96 @@ const Charges = () => {
 
             <tbody className="divide-y divide-[#E2E8F0]">
 
-              {filteredHouseholds.map((household) => (
-
-                <tr
-                  key={household.id}
-                  className="hover:bg-[#F8FAFC]"
-                >
-
-                  <td className="px-5 py-4 text-sm font-medium">
-                    {household.household}
+              {loading ? (
+                <tr>
+                  <td colSpan="7" className="px-5 py-12 text-center text-sm text-[#64748B]">
+                    Loading charge records...
                   </td>
+                </tr>
+              ) : filteredHouseholds.length > 0 ? (
+                filteredHouseholds.map((household) => (
 
-                  <td className="px-5 py-4 text-sm text-[#64748B]">
-                    {household.head}
-                  </td>
+                  <tr
+                    key={household._id}
+                    className="hover:bg-[#F8FAFC]"
+                  >
 
-                  <td className="px-5 py-4 text-sm text-[#64748B]">
-                    {household.members}
-                  </td>
+                    <td className="px-5 py-4 text-sm font-medium">
+                      {household.household}
+                    </td>
 
-                  <td className="px-5 py-4 text-sm font-medium">
-                    ₹{household.amount}
-                  </td>
+                    <td className="px-5 py-4 text-sm text-[#64748B]">
+                      {household.head}
+                    </td>
 
-                  <td className="px-5 py-4 text-sm text-[#64748B]">
-                    {household.dueDate}
-                  </td>
+                    <td className="px-5 py-4 text-sm text-[#64748B]">
+                      {household.members}
+                    </td>
 
-                  <td className="px-5 py-4">
+                    <td className="px-5 py-4 text-sm font-medium">
+                      ₹{household.amount}
+                    </td>
 
-                    <span
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                        statusStyles[household.status]
-                      }`}
-                    >
-                      {household.status}
-                    </span>
+                    <td className="px-5 py-4 text-sm text-[#64748B]">
+                      {household.dueDate}
+                    </td>
 
-                  </td>
+                    <td className="px-5 py-4">
 
-                  <td className="px-5 py-4 text-right">
-
-                    {household.status !== 'Paid' && (
-
-                      <button
-                        onClick={() => markPaid(household.id)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-[#E2E8F0] px-3 py-1.5 text-sm font-medium hover:border-[#16A34A] hover:text-[#16A34A]"
+                      <span
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                          statusStyles[household.status]
+                        }`}
                       >
-                        <CheckCircle size={15} />
-                        Mark Paid
-                      </button>
-
-                    )}
-
-                    {household.status === 'Paid' && (
-
-                      <span className="text-xs text-[#16A34A]">
-                        Recorded
+                        {household.status}
                       </span>
 
-                    )}
+                    </td>
 
+                    <td className="px-5 py-4 text-right">
+
+                      {household.status !== 'Paid' && (
+
+                        <button
+                          onClick={() => markPaid(household._id)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#E2E8F0] px-3 py-1.5 text-sm font-medium hover:border-[#16A34A] hover:text-[#16A34A]"
+                        >
+                          <CheckCircle size={15} />
+                          Mark Paid
+                        </button>
+
+                      )}
+
+                      {household.status === 'Paid' && (
+
+                        <span className="text-xs text-[#16A34A]">
+                          Recorded
+                        </span>
+
+                      )}
+
+                    </td>
+
+                  </tr>
+
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="7" className="px-5 py-12 text-center">
+                    <div className="flex flex-col items-center">
+                      <IndianRupee size={28} className="text-[#64748B]" />
+
+                      <p className="mt-3 text-sm font-medium text-[#0F172A]">
+                        No charge records found
+                      </p>
+
+                      <p className="mt-1 text-xs text-[#64748B]">
+                        Try changing your filters.
+                      </p>
+                    </div>
                   </td>
-
                 </tr>
-
-              ))}
+              )}
 
             </tbody>
 
