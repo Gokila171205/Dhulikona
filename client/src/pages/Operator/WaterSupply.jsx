@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import api from '../../api/axios';
 import {
   CalendarDays,
   Clock3,
@@ -7,49 +8,6 @@ import {
   Plus,
   Search,
 } from 'lucide-react';
-
-const initialSupplyRecords = [
-  {
-    id: 1,
-    date: '2026-08-13',
-    startTime: '06:00',
-    endTime: '08:00',
-    area: 'Main Village',
-    pump: 'Main Village Pump',
-    status: 'Completed',
-    remarks: 'Normal supply',
-  },
-  {
-    id: 2,
-    date: '2026-08-13',
-    startTime: '12:00',
-    endTime: '13:00',
-    area: 'North Area',
-    pump: 'North Area Pump',
-    status: 'Upcoming',
-    remarks: '',
-  },
-  {
-    id: 3,
-    date: '2026-08-13',
-    startTime: '17:00',
-    endTime: '19:00',
-    area: 'Main Village',
-    pump: 'Main Village Pump',
-    status: 'Upcoming',
-    remarks: '',
-  },
-  {
-    id: 4,
-    date: '2026-08-12',
-    startTime: '06:00',
-    endTime: '08:00',
-    area: 'Main Village',
-    pump: 'Main Village Pump',
-    status: 'Completed',
-    remarks: 'Good pressure',
-  },
-];
 
 const statusStyles = {
   Completed: 'bg-green-50 text-green-700',
@@ -61,7 +19,12 @@ const statusStyles = {
 const formatDate = (date) => {
   if (!date) return '-';
 
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-IN', {
+  const dateValue =
+    typeof date === 'string' && date.includes('T')
+      ? date.split('T')[0]
+      : date;
+
+  return new Date(`${dateValue}T00:00:00`).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -83,7 +46,9 @@ const formatTime = (time) => {
 };
 
 const WaterSupply = () => {
-  const [records, setRecords] = useState(initialSupplyRecords);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [dateFilter, setDateFilter] = useState('');
@@ -101,24 +66,77 @@ const WaterSupply = () => {
     remarks: '',
   });
 
+  // =========================
+  // FETCH RECORDS
+  // =========================
+  useEffect(() => {
+    fetchRecords();
+  }, []);
+
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+
+      const res = await api.get('/water-supply');
+
+      // Handle both:
+      // res.data = [...]
+      // OR
+      // res.data = { data: [...] }
+      const data = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.data)
+        ? res.data.data
+        : [];
+
+      setRecords(data);
+    } catch (err) {
+      console.error('Failed to fetch supply records:', err);
+      setRecords([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // =========================
+  // FILTER RECORDS
+  // =========================
   const filteredRecords = useMemo(() => {
     return records.filter((record) => {
       const searchText = search.toLowerCase();
 
+      const areaText = String(record.area || '').toLowerCase();
+
+      // Supports both:
+      // pump: "Main Pump"
+      // pump: { name: "Main Pump" }
+      const pumpText =
+        typeof record.pump === 'object'
+          ? String(record.pump?.name || '').toLowerCase()
+          : String(record.pump || '').toLowerCase();
+
       const matchesSearch =
-        record.area.toLowerCase().includes(searchText) ||
-        record.pump.toLowerCase().includes(searchText);
+        areaText.includes(searchText) ||
+        pumpText.includes(searchText);
 
       const matchesStatus =
         statusFilter === 'All' || record.status === statusFilter;
 
+      const recordDate =
+        typeof record.date === 'string' && record.date.includes('T')
+          ? record.date.split('T')[0]
+          : record.date;
+
       const matchesDate =
-        !dateFilter || record.date === dateFilter;
+        !dateFilter || recordDate === dateFilter;
 
       return matchesSearch && matchesStatus && matchesDate;
     });
   }, [records, search, statusFilter, dateFilter]);
 
+  // =========================
+  // ADD FORM
+  // =========================
   const openAddForm = () => {
     setEditingRecord(null);
 
@@ -135,27 +153,41 @@ const WaterSupply = () => {
     setShowForm(true);
   };
 
+  // =========================
+  // EDIT FORM
+  // =========================
   const openEditForm = (record) => {
     setEditingRecord(record);
 
     setFormData({
-      date: record.date,
-      startTime: record.startTime,
-      endTime: record.endTime,
-      area: record.area,
-      pump: record.pump,
-      status: record.status,
-      remarks: record.remarks,
+      date: record.date
+        ? String(record.date).split('T')[0]
+        : '',
+      startTime: record.startTime || '',
+      endTime: record.endTime || '',
+      area: record.area || '',
+      pump:
+        typeof record.pump === 'object'
+          ? record.pump?._id || ''
+          : record.pump || '',
+      status: record.status || 'Upcoming',
+      remarks: record.remarks || '',
     });
 
     setShowForm(true);
   };
 
+  // =========================
+  // CLOSE FORM
+  // =========================
   const closeForm = () => {
     setShowForm(false);
     setEditingRecord(null);
   };
 
+  // =========================
+  // HANDLE FORM CHANGE
+  // =========================
   const handleChange = (event) => {
     const { name, value } = event.target;
 
@@ -165,7 +197,10 @@ const WaterSupply = () => {
     }));
   };
 
-  const handleSubmit = (event) => {
+  // =========================
+  // SUBMIT FORM
+  // =========================
+  const handleSubmit = async (event) => {
     event.preventDefault();
 
     if (
@@ -183,40 +218,44 @@ const WaterSupply = () => {
       return;
     }
 
-    if (editingRecord) {
-      setRecords((previous) =>
-        previous.map((record) =>
-          record.id === editingRecord.id
-            ? {
-                ...record,
-                ...formData,
-                area: formData.area.trim(),
-                pump: formData.pump.trim(),
-                remarks: formData.remarks.trim(),
-              }
-            : record
-        )
-      );
-    } else {
-      const newRecord = {
-        id: Date.now(),
+    try {
+      const payload = {
         ...formData,
         area: formData.area.trim(),
         pump: formData.pump.trim(),
         remarks: formData.remarks.trim(),
       };
 
-      setRecords((previous) => [newRecord, ...previous]);
-    }
+      if (editingRecord) {
+        await api.put(
+          `/water-supply/${editingRecord._id}`,
+          payload
+        );
+      } else {
+        await api.post('/water-supply', payload);
+      }
 
-    closeForm();
+      await fetchRecords();
+      closeForm();
+    } catch (err) {
+      console.error('Failed to save supply record:', err);
+      alert('Something went wrong while saving.');
+    }
   };
 
-  const today = '2026-08-13';
+  // =========================
+  // TODAY
+  // =========================
+  const today = new Date().toISOString().split('T')[0];
 
-  const todayRecords = records.filter(
-    (record) => record.date === today
-  );
+  const todayRecords = records.filter((record) => {
+    const recordDate =
+      typeof record.date === 'string' && record.date.includes('T')
+        ? record.date.split('T')[0]
+        : record.date;
+
+    return recordDate === today;
+  });
 
   const completedToday = todayRecords.filter(
     (record) => record.status === 'Completed'
@@ -226,8 +265,12 @@ const WaterSupply = () => {
     (record) => record.status === 'Upcoming'
   ).length;
 
+  // =========================
+  // RENDER
+  // =========================
   return (
     <div className="min-h-full bg-[#F8FAFC] p-6">
+
       {/* Header */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -252,6 +295,7 @@ const WaterSupply = () => {
 
       {/* Summary */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+
         <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
@@ -265,7 +309,10 @@ const WaterSupply = () => {
             </div>
 
             <div className="rounded-lg bg-[#E0F2FE] p-2.5">
-              <Droplets size={20} className="text-[#0284C7]" />
+              <Droplets
+                size={20}
+                className="text-[#0284C7]"
+              />
             </div>
           </div>
         </div>
@@ -273,7 +320,9 @@ const WaterSupply = () => {
         <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-[#64748B]">Completed Today</p>
+              <p className="text-sm text-[#64748B]">
+                Completed Today
+              </p>
 
               <p className="mt-2 text-2xl font-bold text-[#0F172A]">
                 {completedToday}
@@ -281,7 +330,10 @@ const WaterSupply = () => {
             </div>
 
             <div className="rounded-lg bg-green-50 p-2.5">
-              <Clock3 size={20} className="text-[#16A34A]" />
+              <Clock3
+                size={20}
+                className="text-[#16A34A]"
+              />
             </div>
           </div>
         </div>
@@ -289,7 +341,9 @@ const WaterSupply = () => {
         <div className="rounded-xl border border-[#E2E8F0] bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-[#64748B]">Upcoming Today</p>
+              <p className="text-sm text-[#64748B]">
+                Upcoming Today
+              </p>
 
               <p className="mt-2 text-2xl font-bold text-[#0F172A]">
                 {upcomingToday}
@@ -297,16 +351,22 @@ const WaterSupply = () => {
             </div>
 
             <div className="rounded-lg bg-blue-50 p-2.5">
-              <CalendarDays size={20} className="text-[#2563EB]" />
+              <CalendarDays
+                size={20}
+                className="text-[#2563EB]"
+              />
             </div>
           </div>
         </div>
+
       </div>
 
       {/* Records */}
       <section className="rounded-xl border border-[#E2E8F0] bg-white shadow-sm">
+
         {/* Filters */}
         <div className="flex flex-col gap-4 border-b border-[#E2E8F0] p-5">
+
           <div>
             <h2 className="text-lg font-semibold text-[#0F172A]">
               Supply Records
@@ -318,6 +378,7 @@ const WaterSupply = () => {
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row">
+
             <div className="relative flex-1">
               <Search
                 size={17}
@@ -328,7 +389,9 @@ const WaterSupply = () => {
                 type="text"
                 placeholder="Search area or pump..."
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
                 className="h-10 w-full rounded-lg border border-[#E2E8F0] bg-white pl-9 pr-3 text-sm text-[#0F172A] outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/10"
               />
             </div>
@@ -336,19 +399,25 @@ const WaterSupply = () => {
             <input
               type="date"
               value={dateFilter}
-              onChange={(event) => setDateFilter(event.target.value)}
+              onChange={(event) =>
+                setDateFilter(event.target.value)
+              }
               className="h-10 rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm text-[#0F172A] outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/10"
             />
 
             <select
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
+              onChange={(event) =>
+                setStatusFilter(event.target.value)
+              }
               className="h-10 rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm text-[#0F172A] outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/10"
             >
               <option value="All">All Status</option>
               <option value="Completed">Completed</option>
               <option value="Upcoming">Upcoming</option>
-              <option value="In Progress">In Progress</option>
+              <option value="In Progress">
+                In Progress
+              </option>
               <option value="Cancelled">Cancelled</option>
             </select>
 
@@ -361,14 +430,17 @@ const WaterSupply = () => {
                 Clear Date
               </button>
             )}
+
           </div>
         </div>
 
         {/* Table */}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1050px]">
+
             <thead>
               <tr className="bg-[#F8FAFC] text-left">
+
                 <th className="px-5 py-3 text-xs font-semibold text-[#64748B]">
                   Date
                 </th>
@@ -396,70 +468,104 @@ const WaterSupply = () => {
                 <th className="px-5 py-3 text-right text-xs font-semibold text-[#64748B]">
                   Action
                 </th>
+
               </tr>
             </thead>
 
             <tbody className="divide-y divide-[#E2E8F0]">
-              {filteredRecords.length > 0 ? (
-                filteredRecords.map((record) => (
-                  <tr
-                    key={record.id}
-                    className="transition hover:bg-[#F8FAFC]"
-                  >
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2 text-sm text-[#64748B]">
-                        <CalendarDays size={15} />
-                        {formatDate(record.date)}
-                      </div>
-                    </td>
 
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2 text-sm font-medium text-[#0F172A]">
-                        <Clock3 size={15} className="text-[#0284C7]" />
-                        {formatTime(record.startTime)} -{' '}
-                        {formatTime(record.endTime)}
-                      </div>
-                    </td>
-
-                    <td className="px-5 py-4 text-sm text-[#0F172A]">
-                      {record.area}
-                    </td>
-
-                    <td className="px-5 py-4 text-sm text-[#64748B]">
-                      {record.pump}
-                    </td>
-
-                    <td className="px-5 py-4">
-                      <span
-                        className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium ${
-                          statusStyles[record.status] ||
-                          'bg-slate-100 text-slate-700'
-                        }`}
-                      >
-                        {record.status}
-                      </span>
-                    </td>
-
-                    <td className="max-w-[200px] truncate px-5 py-4 text-sm text-[#64748B]">
-                      {record.remarks || '-'}
-                    </td>
-
-                    <td className="px-5 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => openEditForm(record)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm font-medium text-[#0F172A] transition hover:border-[#0F766E] hover:text-[#0F766E]"
-                      >
-                        <Edit size={15} />
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              ) : (
+              {loading ? (
                 <tr>
-                  <td colSpan="7" className="px-5 py-12 text-center">
+                  <td
+                    colSpan="7"
+                    className="px-5 py-12 text-center text-sm text-[#64748B]"
+                  >
+                    Loading supply records...
+                  </td>
+                </tr>
+              ) : filteredRecords.length > 0 ? (
+
+                filteredRecords.map((record) => {
+
+                  const pumpName =
+                    typeof record.pump === 'object'
+                      ? record.pump?.name || 'Unknown pump'
+                      : record.pump || '-';
+
+                  return (
+                    <tr
+                      key={record._id}
+                      className="transition hover:bg-[#F8FAFC]"
+                    >
+
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2 text-sm text-[#64748B]">
+                          <CalendarDays size={15} />
+                          {formatDate(record.date)}
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2 text-sm font-medium text-[#0F172A]">
+                          <Clock3
+                            size={15}
+                            className="text-[#0284C7]"
+                          />
+
+                          {formatTime(record.startTime)} -{' '}
+                          {formatTime(record.endTime)}
+                        </div>
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-[#0F172A]">
+                        {record.area || '-'}
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-[#64748B]">
+                        {pumpName}
+                      </td>
+
+                      <td className="px-5 py-4">
+                        <span
+                          className={`inline-flex rounded-md px-2.5 py-1 text-xs font-medium ${
+                            statusStyles[record.status] ||
+                            'bg-slate-100 text-slate-700'
+                          }`}
+                        >
+                          {record.status || '-'}
+                        </span>
+                      </td>
+
+                      <td className="max-w-[200px] truncate px-5 py-4 text-sm text-[#64748B]">
+                        {record.remarks || '-'}
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openEditForm(record)
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#E2E8F0] bg-white px-3 py-1.5 text-sm font-medium text-[#0F172A] transition hover:border-[#0F766E] hover:text-[#0F766E]"
+                        >
+                          <Edit size={15} />
+                          Edit
+                        </button>
+                      </td>
+
+                    </tr>
+                  );
+                })
+
+              ) : (
+
+                <tr>
+                  <td
+                    colSpan="7"
+                    className="px-5 py-12 text-center"
+                  >
                     <div className="flex flex-col items-center">
+
                       <Droplets
                         size={28}
                         className="text-[#64748B]"
@@ -472,26 +578,34 @@ const WaterSupply = () => {
                       <p className="mt-1 text-xs text-[#64748B]">
                         Try changing your filters or add a new record.
                       </p>
+
                     </div>
                   </td>
                 </tr>
+
               )}
+
             </tbody>
           </table>
         </div>
 
         <div className="border-t border-[#E2E8F0] px-5 py-3">
           <p className="text-xs text-[#64748B]">
-            Showing {filteredRecords.length} of {records.length} records
+            Showing {filteredRecords.length} of{' '}
+            {records.length} records
           </p>
         </div>
+
       </section>
 
       {/* Add / Edit Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+
           <div className="w-full max-w-2xl rounded-xl border border-[#E2E8F0] bg-white shadow-xl">
+
             <div className="border-b border-[#E2E8F0] px-6 py-4">
+
               <h2 className="text-lg font-semibold text-[#0F172A]">
                 {editingRecord
                   ? 'Edit Supply Record'
@@ -501,11 +615,15 @@ const WaterSupply = () => {
               <p className="mt-1 text-xs text-[#64748B]">
                 Enter the details of the water supply session.
               </p>
+
             </div>
 
             <form onSubmit={handleSubmit}>
+
               <div className="space-y-4 p-6">
+
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+
                   <div>
                     <label
                       htmlFor="date"
@@ -562,9 +680,11 @@ const WaterSupply = () => {
                       className="h-10 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm text-[#0F172A] outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/10"
                     />
                   </div>
+
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
                   <div>
                     <label
                       htmlFor="area"
@@ -601,19 +721,28 @@ const WaterSupply = () => {
                       required
                       className="h-10 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm text-[#0F172A] outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/10"
                     >
-                      <option value="">Select pump</option>
+                      <option value="">
+                        Select pump
+                      </option>
+
                       <option value="Main Village Pump">
                         Main Village Pump
                       </option>
+
                       <option value="North Area Pump">
                         North Area Pump
                       </option>
-                      <option value="School Pump">School Pump</option>
+
+                      <option value="School Pump">
+                        School Pump
+                      </option>
+
                       <option value="Community Pump">
                         Community Pump
                       </option>
                     </select>
                   </div>
+
                 </div>
 
                 <div>
@@ -631,10 +760,21 @@ const WaterSupply = () => {
                     onChange={handleChange}
                     className="h-10 w-full rounded-lg border border-[#E2E8F0] bg-white px-3 text-sm text-[#0F172A] outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/10"
                   >
-                    <option value="Upcoming">Upcoming</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Cancelled">Cancelled</option>
+                    <option value="Upcoming">
+                      Upcoming
+                    </option>
+
+                    <option value="In Progress">
+                      In Progress
+                    </option>
+
+                    <option value="Completed">
+                      Completed
+                    </option>
+
+                    <option value="Cancelled">
+                      Cancelled
+                    </option>
                   </select>
                 </div>
 
@@ -656,9 +796,11 @@ const WaterSupply = () => {
                     className="w-full resize-none rounded-lg border border-[#E2E8F0] bg-white px-3 py-2 text-sm text-[#0F172A] outline-none focus:border-[#0F766E] focus:ring-2 focus:ring-[#0F766E]/10"
                   />
                 </div>
+
               </div>
 
               <div className="flex justify-end gap-3 border-t border-[#E2E8F0] px-6 py-4">
+
                 <button
                   type="button"
                   onClick={closeForm}
@@ -671,13 +813,18 @@ const WaterSupply = () => {
                   type="submit"
                   className="h-10 rounded-lg bg-[#0F766E] px-4 text-sm font-medium text-white transition hover:bg-[#115E59]"
                 >
-                  {editingRecord ? 'Save Changes' : 'Record Supply'}
+                  {editingRecord
+                    ? 'Save Changes'
+                    : 'Record Supply'}
                 </button>
+
               </div>
+
             </form>
           </div>
         </div>
       )}
+
     </div>
   );
 };

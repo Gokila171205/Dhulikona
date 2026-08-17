@@ -5,7 +5,13 @@ const complaintSchema = new mongoose.Schema({
   description: { type: String, required: true },
   village: { type: mongoose.Schema.Types.ObjectId, ref: 'Village', required: true },
   reportedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Operator
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  priority: {
+  type: String,
+  enum: ['Low', 'Medium', 'High'],
+  default: 'Medium'
+},
+   // Operator
   status: { 
     type: String, 
     enum: ['Submitted', 'Verified', 'Maintenance Started', 'Resolved', 'Confirmed'],
@@ -13,6 +19,7 @@ const complaintSchema = new mongoose.Schema({
   },
   resolvedAt: { type: Date },
   confirmedAt: { type: Date }
-}, { timestamps: true });
+}, { timestamps: true }
+);
 
 module.exports = mongoose.model('Complaint', complaintSchema);

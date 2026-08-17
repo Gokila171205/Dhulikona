@@ -1,56 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle,
-  Clock,
   Eye,
   FileWarning,
   Search,
   Wrench,
   XCircle,
 } from 'lucide-react';
-
-const initialComplaints = [
-  {
-    id: 1,
-    title: 'No water supply',
-    description: 'No water has been supplied to the household since morning.',
-    reportedBy: 'Anita Das',
-    village: 'Borbari',
-    date: '2026-08-13',
-    status: 'Submitted',
-    priority: 'High',
-  },
-  {
-    id: 2,
-    title: 'Low water pressure',
-    description: 'Water pressure is very low in the north area.',
-    reportedBy: 'Rakesh Das',
-    village: 'Borbari',
-    date: '2026-08-12',
-    status: 'Verified',
-    priority: 'Medium',
-  },
-  {
-    id: 3,
-    title: 'Pump not working',
-    description: 'The community pump has stopped working.',
-    reportedBy: 'Mina Devi',
-    village: 'Borbari',
-    date: '2026-08-11',
-    status: 'Maintenance Started',
-    priority: 'High',
-  },
-  {
-    id: 4,
-    title: 'Irregular water timing',
-    description: 'Water supply timing has been inconsistent.',
-    reportedBy: 'Rahul Das',
-    village: 'Borbari',
-    date: '2026-08-09',
-    status: 'Resolved',
-    priority: 'Low',
-  },
-];
+import api from '../../api/axios';
 
 const statusStyles = {
   Submitted: 'bg-orange-50 text-orange-700',
@@ -67,42 +24,61 @@ const priorityStyles = {
 };
 
 const Complaints = () => {
-  const [complaints, setComplaints] = useState(initialComplaints);
+  const [complaints, setComplaints] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [selectedComplaint, setSelectedComplaint] = useState(null);
 
+  useEffect(() => {
+    fetchComplaints();
+  }, []);
+
+  const fetchComplaints = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/complaints');
+      setComplaints(res.data);
+    } catch (err) {
+      console.error('Failed to fetch complaints:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredComplaints = useMemo(() => {
     return complaints.filter((complaint) => {
       const searchText = search.toLowerCase();
+      const villageName = complaint.village?.name || '';
+      const reporterName = complaint.reportedBy?.name || '';
 
       const matchesSearch =
         complaint.title.toLowerCase().includes(searchText) ||
-        complaint.reportedBy.toLowerCase().includes(searchText) ||
-        complaint.village.toLowerCase().includes(searchText);
+        reporterName.toLowerCase().includes(searchText) ||
+        villageName.toLowerCase().includes(searchText);
 
       const matchesStatus =
-        statusFilter === 'All' ||
-        complaint.status === statusFilter;
+        statusFilter === 'All' || complaint.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
   }, [complaints, search, statusFilter]);
 
-  const updateStatus = (id, status) => {
-    setComplaints((previous) =>
-      previous.map((complaint) =>
-        complaint.id === id
-          ? { ...complaint, status }
-          : complaint
-      )
-    );
+  const updateStatus = async (id, status) => {
+    try {
+      const res = await api.patch(`/complaints/${id}/status`, { status });
 
-    setSelectedComplaint((previous) =>
-      previous
-        ? { ...previous, status }
-        : previous
-    );
+      setComplaints((previous) =>
+        previous.map((complaint) =>
+          complaint._id === id ? res.data : complaint
+        )
+      );
+
+      setSelectedComplaint(res.data);
+    } catch (err) {
+      console.error('Failed to update complaint status:', err);
+      alert('Something went wrong while updating status.');
+    }
   };
 
   return (
@@ -127,9 +103,7 @@ const Complaints = () => {
           </p>
 
           <p className="mt-2 text-2xl font-bold text-[#0F172A]">
-            {complaints.filter(
-              (c) => c.status === 'Submitted'
-            ).length}
+            {complaints.filter((c) => c.status === 'Submitted').length}
           </p>
         </div>
 
@@ -139,9 +113,7 @@ const Complaints = () => {
           </p>
 
           <p className="mt-2 text-2xl font-bold text-[#0F172A]">
-            {complaints.filter(
-              (c) => c.status === 'Maintenance Started'
-            ).length}
+            {complaints.filter((c) => c.status === 'Maintenance Started').length}
           </p>
         </div>
 
@@ -152,9 +124,7 @@ const Complaints = () => {
 
           <p className="mt-2 text-2xl font-bold text-[#0F172A]">
             {complaints.filter(
-              (c) =>
-                c.status === 'Resolved' ||
-                c.status === 'Confirmed'
+              (c) => c.status === 'Resolved' || c.status === 'Confirmed'
             ).length}
           </p>
         </div>
@@ -203,9 +173,7 @@ const Complaints = () => {
               <option value="All">All Status</option>
               <option value="Submitted">Submitted</option>
               <option value="Verified">Verified</option>
-              <option value="Maintenance Started">
-                Maintenance Started
-              </option>
+              <option value="Maintenance Started">Maintenance Started</option>
               <option value="Resolved">Resolved</option>
               <option value="Confirmed">Confirmed</option>
             </select>
@@ -249,87 +217,110 @@ const Complaints = () => {
 
             <tbody className="divide-y divide-[#E2E8F0]">
 
-              {filteredComplaints.map((complaint) => (
-
-                <tr
-                  key={complaint.id}
-                  className="hover:bg-[#F8FAFC]"
-                >
-
-                  <td className="px-5 py-4">
-
-                    <div className="flex items-start gap-3">
-
-                      <div className="rounded-lg bg-[#E0F2FE] p-2">
-                        <FileWarning
-                          size={17}
-                          className="text-[#0284C7]"
-                        />
-                      </div>
-
-                      <div>
-                        <p className="text-sm font-medium text-[#0F172A]">
-                          {complaint.title}
-                        </p>
-
-                        <p className="mt-1 text-xs text-[#64748B]">
-                          {complaint.village}
-                        </p>
-                      </div>
-
-                    </div>
-
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="px-5 py-12 text-center text-sm text-[#64748B]">
+                    Loading complaints...
                   </td>
-
-                  <td className="px-5 py-4 text-sm text-[#64748B]">
-                    {complaint.reportedBy}
-                  </td>
-
-                  <td className="px-5 py-4 text-sm text-[#64748B]">
-                    {complaint.date}
-                  </td>
-
-                  <td className="px-5 py-4">
-
-                    <span
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                        priorityStyles[complaint.priority]
-                      }`}
-                    >
-                      {complaint.priority}
-                    </span>
-
-                  </td>
-
-                  <td className="px-5 py-4">
-
-                    <span
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                        statusStyles[complaint.status]
-                      }`}
-                    >
-                      {complaint.status}
-                    </span>
-
-                  </td>
-
-                  <td className="px-5 py-4 text-right">
-
-                    <button
-                      onClick={() =>
-                        setSelectedComplaint(complaint)
-                      }
-                      className="inline-flex items-center gap-1.5 rounded-md border border-[#E2E8F0] px-3 py-1.5 text-sm font-medium hover:border-[#0F766E] hover:text-[#0F766E]"
-                    >
-                      <Eye size={15} />
-                      View
-                    </button>
-
-                  </td>
-
                 </tr>
+              ) : filteredComplaints.length > 0 ? (
+                filteredComplaints.map((complaint) => (
 
-              ))}
+                  <tr
+                    key={complaint._id}
+                    className="hover:bg-[#F8FAFC]"
+                  >
+
+                    <td className="px-5 py-4">
+
+                      <div className="flex items-start gap-3">
+
+                        <div className="rounded-lg bg-[#E0F2FE] p-2">
+                          <FileWarning size={17} className="text-[#0284C7]" />
+                        </div>
+
+                        <div>
+                          <p className="text-sm font-medium text-[#0F172A]">
+                            {complaint.title}
+                          </p>
+
+                          <p className="mt-1 text-xs text-[#64748B]">
+                            {complaint.village?.name || 'Unknown village'}
+                          </p>
+                        </div>
+
+                      </div>
+
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-[#64748B]">
+                      {complaint.reportedBy?.name || 'Unknown'}
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-[#64748B]">
+                      {new Date(complaint.createdAt).toLocaleDateString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
+                    </td>
+
+                    <td className="px-5 py-4">
+
+                      <span
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                          priorityStyles[complaint.priority]
+                        }`}
+                      >
+                        {complaint.priority}
+                      </span>
+
+                    </td>
+
+                    <td className="px-5 py-4">
+
+                      <span
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                          statusStyles[complaint.status]
+                        }`}
+                      >
+                        {complaint.status}
+                      </span>
+
+                    </td>
+
+                    <td className="px-5 py-4 text-right">
+
+                      <button
+                        onClick={() => setSelectedComplaint(complaint)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-[#E2E8F0] px-3 py-1.5 text-sm font-medium hover:border-[#0F766E] hover:text-[#0F766E]"
+                      >
+                        <Eye size={15} />
+                        View
+                      </button>
+
+                    </td>
+
+                  </tr>
+
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" className="px-5 py-12 text-center">
+                    <div className="flex flex-col items-center">
+                      <FileWarning size={28} className="text-[#64748B]" />
+
+                      <p className="mt-3 text-sm font-medium text-[#0F172A]">
+                        No complaints found
+                      </p>
+
+                      <p className="mt-1 text-xs text-[#64748B]">
+                        Try changing your search or status filter.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              )}
 
             </tbody>
 
@@ -356,7 +347,7 @@ const Complaints = () => {
                   </h2>
 
                   <p className="mt-1 text-xs text-[#64748B]">
-                    Reported by {selectedComplaint.reportedBy}
+                    Reported by {selectedComplaint.reportedBy?.name || 'Unknown'}
                   </p>
                 </div>
 
@@ -391,7 +382,7 @@ const Complaints = () => {
                   </p>
 
                   <p className="mt-1 text-sm font-medium">
-                    {selectedComplaint.village}
+                    {selectedComplaint.village?.name || 'Unknown'}
                   </p>
                 </div>
 
@@ -417,12 +408,7 @@ const Complaints = () => {
 
                   {selectedComplaint.status === 'Submitted' && (
                     <button
-                      onClick={() =>
-                        updateStatus(
-                          selectedComplaint.id,
-                          'Verified'
-                        )
-                      }
+                      onClick={() => updateStatus(selectedComplaint._id, 'Verified')}
                       className="flex items-center justify-center gap-2 rounded-lg bg-[#0F766E] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#115E59]"
                     >
                       <CheckCircle size={17} />
@@ -432,12 +418,7 @@ const Complaints = () => {
 
                   {selectedComplaint.status === 'Verified' && (
                     <button
-                      onClick={() =>
-                        updateStatus(
-                          selectedComplaint.id,
-                          'Maintenance Started'
-                        )
-                      }
+                      onClick={() => updateStatus(selectedComplaint._id, 'Maintenance Started')}
                       className="flex items-center justify-center gap-2 rounded-lg bg-[#D97706] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90"
                     >
                       <Wrench size={17} />
@@ -447,12 +428,7 @@ const Complaints = () => {
 
                   {selectedComplaint.status === 'Maintenance Started' && (
                     <button
-                      onClick={() =>
-                        updateStatus(
-                          selectedComplaint.id,
-                          'Resolved'
-                        )
-                      }
+                      onClick={() => updateStatus(selectedComplaint._id, 'Resolved')}
                       className="flex items-center justify-center gap-2 rounded-lg bg-[#16A34A] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90"
                     >
                       <CheckCircle size={17} />

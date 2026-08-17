@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   CalendarDays,
   CheckCircle,
@@ -7,39 +7,7 @@ import {
   Search,
   Wrench,
 } from 'lucide-react';
-
-const initialMaintenance = [
-  {
-    id: 1,
-    pump: 'Main Village Pump',
-    issue: 'Motor overheating',
-    priority: 'High',
-    status: 'In Progress',
-    scheduledDate: '2026-08-14',
-    technician: 'Village Maintenance Team',
-    notes: 'Motor requires inspection.',
-  },
-  {
-    id: 2,
-    pump: 'North Area Pump',
-    issue: 'Low water pressure',
-    priority: 'Medium',
-    status: 'Scheduled',
-    scheduledDate: '2026-08-15',
-    technician: 'Village Maintenance Team',
-    notes: 'Check pipe connection.',
-  },
-  {
-    id: 3,
-    pump: 'Community Pump',
-    issue: 'Pump stopped',
-    priority: 'High',
-    status: 'Completed',
-    scheduledDate: '2026-08-11',
-    technician: 'Village Maintenance Team',
-    notes: 'Motor replaced successfully.',
-  },
-];
+import api from '../../api/axios';
 
 const statusStyles = {
   Scheduled: 'bg-blue-50 text-blue-700',
@@ -54,7 +22,9 @@ const priorityStyles = {
 };
 
 const Maintenance = () => {
-  const [records, setRecords] = useState(initialMaintenance);
+  const [records, setRecords] = useState([]);
+  const [pumps, setPumps] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
 
@@ -67,11 +37,38 @@ const Maintenance = () => {
     notes: '',
   });
 
+  useEffect(() => {
+    fetchRecords();
+    fetchPumps();
+  }, []);
+
+  const fetchRecords = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/maintenance');
+      setRecords(res.data);
+    } catch (err) {
+      console.error('Failed to fetch maintenance records:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPumps = async () => {
+    try {
+      const res = await api.get('/pumps');
+      setPumps(res.data);
+    } catch (err) {
+      console.error('Failed to fetch pumps:', err);
+    }
+  };
+
   const filteredRecords = records.filter((record) => {
     const text = search.toLowerCase();
+    const pumpName = record.pump?.name || '';
 
     return (
-      record.pump.toLowerCase().includes(text) ||
+      pumpName.toLowerCase().includes(text) ||
       record.issue.toLowerCase().includes(text)
     );
   });
@@ -83,49 +80,42 @@ const Maintenance = () => {
     });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (
-      !formData.pump ||
-      !formData.issue ||
-      !formData.scheduledDate
-    ) {
+    if (!formData.pump || !formData.issue || !formData.scheduledDate) {
       alert('Please fill all required fields.');
       return;
     }
 
-    const newRecord = {
-      id: Date.now(),
-      ...formData,
-      status: 'Scheduled',
-    };
+    try {
+      await api.post('/maintenance', formData);
+      await fetchRecords();
 
-    setRecords((previous) => [
-      newRecord,
-      ...previous,
-    ]);
+      setFormData({
+        pump: '',
+        issue: '',
+        priority: 'Medium',
+        scheduledDate: '',
+        technician: '',
+        notes: '',
+      });
 
-    setFormData({
-      pump: '',
-      issue: '',
-      priority: 'Medium',
-      scheduledDate: '',
-      technician: '',
-      notes: '',
-    });
-
-    setShowForm(false);
+      setShowForm(false);
+    } catch (err) {
+      console.error('Failed to save maintenance record:', err);
+      alert('Something went wrong while saving.');
+    }
   };
 
-  const markCompleted = (id) => {
-    setRecords((previous) =>
-      previous.map((record) =>
-        record.id === id
-          ? { ...record, status: 'Completed' }
-          : record
-      )
-    );
+  const markCompleted = async (id) => {
+    try {
+      await api.patch(`/maintenance/${id}/status`, { status: 'Completed' });
+      await fetchRecords();
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      alert('Something went wrong while updating status.');
+    }
   };
 
   return (
@@ -162,9 +152,7 @@ const Maintenance = () => {
           </p>
 
           <p className="mt-2 text-2xl font-bold">
-            {records.filter(
-              (r) => r.status === 'Scheduled'
-            ).length}
+            {records.filter((r) => r.status === 'Scheduled').length}
           </p>
         </div>
 
@@ -174,9 +162,7 @@ const Maintenance = () => {
           </p>
 
           <p className="mt-2 text-2xl font-bold">
-            {records.filter(
-              (r) => r.status === 'In Progress'
-            ).length}
+            {records.filter((r) => r.status === 'In Progress').length}
           </p>
         </div>
 
@@ -186,9 +172,7 @@ const Maintenance = () => {
           </p>
 
           <p className="mt-2 text-2xl font-bold">
-            {records.filter(
-              (r) => r.status === 'Completed'
-            ).length}
+            {records.filter((r) => r.status === 'Completed').length}
           </p>
         </div>
 
@@ -257,90 +241,112 @@ const Maintenance = () => {
 
             <tbody className="divide-y divide-[#E2E8F0]">
 
-              {filteredRecords.map((record) => (
+              {loading ? (
+                <tr>
+                  <td colSpan="6" className="px-5 py-12 text-center text-sm text-[#64748B]">
+                    Loading maintenance records...
+                  </td>
+                </tr>
+              ) : filteredRecords.length > 0 ? (
+                filteredRecords.map((record) => (
 
-                <tr
-                  key={record.id}
-                  className="hover:bg-[#F8FAFC]"
-                >
+                  <tr
+                    key={record._id}
+                    className="hover:bg-[#F8FAFC]"
+                  >
 
-                  <td className="px-5 py-4">
+                    <td className="px-5 py-4">
 
-                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3">
 
-                      <div className="rounded-lg bg-[#E0F2FE] p-2">
-                        <Wrench
-                          size={17}
-                          className="text-[#0284C7]"
-                        />
+                        <div className="rounded-lg bg-[#E0F2FE] p-2">
+                          <Wrench
+                            size={17}
+                            className="text-[#0284C7]"
+                          />
+                        </div>
+
+                        <span className="text-sm font-medium">
+                          {record.pump?.name || 'Unknown pump'}
+                        </span>
+
                       </div>
 
-                      <span className="text-sm font-medium">
-                        {record.pump}
+                    </td>
+
+                    <td className="px-5 py-4 text-sm text-[#64748B]">
+                      {record.issue}
+                    </td>
+
+                    <td className="px-5 py-4">
+
+                      <span
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                          priorityStyles[record.priority]
+                        }`}
+                      >
+                        {record.priority}
                       </span>
 
-                    </div>
+                    </td>
 
-                  </td>
+                    <td className="px-5 py-4">
 
-                  <td className="px-5 py-4 text-sm text-[#64748B]">
-                    {record.issue}
-                  </td>
+                      <div className="flex items-center gap-2 text-sm text-[#64748B]">
+                        <CalendarDays size={15} />
+                        {record.scheduledDate}
+                      </div>
 
-                  <td className="px-5 py-4">
+                    </td>
 
-                    <span
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                        priorityStyles[record.priority]
-                      }`}
-                    >
-                      {record.priority}
-                    </span>
+                    <td className="px-5 py-4">
 
-                  </td>
-
-                  <td className="px-5 py-4">
-
-                    <div className="flex items-center gap-2 text-sm text-[#64748B]">
-                      <CalendarDays size={15} />
-                      {record.scheduledDate}
-                    </div>
-
-                  </td>
-
-                  <td className="px-5 py-4">
-
-                    <span
-                      className={`rounded-md px-2.5 py-1 text-xs font-medium ${
-                        statusStyles[record.status]
-                      }`}
-                    >
-                      {record.status}
-                    </span>
-
-                  </td>
-
-                  <td className="px-5 py-4 text-right">
-
-                    {record.status !== 'Completed' && (
-
-                      <button
-                        onClick={() =>
-                          markCompleted(record.id)
-                        }
-                        className="inline-flex items-center gap-1.5 rounded-md border border-[#E2E8F0] px-3 py-1.5 text-sm font-medium hover:border-[#16A34A] hover:text-[#16A34A]"
+                      <span
+                        className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                          statusStyles[record.status]
+                        }`}
                       >
-                        <CheckCircle size={15} />
-                        Complete
-                      </button>
+                        {record.status}
+                      </span>
 
-                    )}
+                    </td>
 
+                    <td className="px-5 py-4 text-right">
+
+                      {record.status !== 'Completed' && (
+
+                        <button
+                          onClick={() => markCompleted(record._id)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[#E2E8F0] px-3 py-1.5 text-sm font-medium hover:border-[#16A34A] hover:text-[#16A34A]"
+                        >
+                          <CheckCircle size={15} />
+                          Complete
+                        </button>
+
+                      )}
+
+                    </td>
+
+                  </tr>
+
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="6" className="px-5 py-12 text-center">
+                    <div className="flex flex-col items-center">
+                      <Wrench size={28} className="text-[#64748B]" />
+
+                      <p className="mt-3 text-sm font-medium text-[#0F172A]">
+                        No maintenance records found
+                      </p>
+
+                      <p className="mt-1 text-xs text-[#64748B]">
+                        Try a different search or schedule a new task.
+                      </p>
+                    </div>
                   </td>
-
                 </tr>
-
-              ))}
+              )}
 
             </tbody>
 
@@ -385,10 +391,11 @@ const Maintenance = () => {
                     className="h-10 w-full rounded-lg border border-[#E2E8F0] px-3 text-sm outline-none focus:border-[#0F766E]"
                   >
                     <option value="">Select pump</option>
-                    <option>Main Village Pump</option>
-                    <option>North Area Pump</option>
-                    <option>School Pump</option>
-                    <option>Community Pump</option>
+                    {pumps.map((pump) => (
+                      <option key={pump._id} value={pump._id}>
+                        {pump.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
