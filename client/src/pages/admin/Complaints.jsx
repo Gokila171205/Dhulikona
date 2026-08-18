@@ -8,8 +8,10 @@ import Table from '../../components/ui/Table';
 import Modal from '../../components/ui/Modal';
 import PieChart from '../../components/charts/PieChart';
 import { Search, Edit2, AlertCircle, Eye, RefreshCw, AlertTriangle, Clock, MapPin, User, MessageSquare } from 'lucide-react';
-import { complaintStatuses, OVERDUE_THRESHOLD_DAYS } from '../../data/mockComplaints';
+import { OVERDUE_THRESHOLD_DAYS } from '../../data/mockComplaints';
 import api from '../../services/api';
+
+const backendStatuses = ['Submitted', 'Verified', 'Maintenance Started', 'Resolved', 'Confirmed'];
 
 const Complaints = () => {
   const [complaints, setComplaints] = useState([]);
@@ -56,27 +58,6 @@ const Complaints = () => {
     return `${day} ${month} ${year} · ${hours}:${minutes} ${ampm}`;
   };
 
-  const mapBackendStatus = (status) => {
-    switch (status) {
-      case 'Submitted': return 'New';
-      case 'Verified': return 'New';
-      case 'Maintenance Started': return 'In Progress';
-      case 'Resolved': return 'Resolved';
-      case 'Confirmed': return 'Closed';
-      default: return status;
-    }
-  };
-
-  const mapFrontendStatusToBackend = (status) => {
-    switch (status) {
-      case 'New': return 'Submitted';
-      case 'In Progress': return 'Maintenance Started';
-      case 'Resolved': return 'Resolved';
-      case 'Closed': return 'Confirmed';
-      default: return status;
-    }
-  };
-
   const fetchRecords = async () => {
     try {
       setLoading(true);
@@ -89,7 +70,7 @@ const Complaints = () => {
 
       let backendStatus = '';
       if (statusFilter) {
-        backendStatus = mapFrontendStatusToBackend(statusFilter);
+        backendStatus = statusFilter;
       }
 
       const params = {
@@ -165,7 +146,7 @@ const Complaints = () => {
   };
 
   const isOverdue = (complaint) => {
-    if (complaint.status === 'Resolved' || complaint.status === 'Closed') return false;
+    if (complaint.status === 'Resolved' || complaint.status === 'Confirmed' || complaint.status === 'Closed') return false;
     return getDaysOld(complaint.createdAt) >= OVERDUE_THRESHOLD_DAYS;
   };
 
@@ -188,14 +169,14 @@ const Complaints = () => {
 
   // Summary Calculations
   const totalComplaints = complaints.length;
-  const newComplaints = complaints.filter(c => c.status === 'New').length;
-  const inProgressComplaints = complaints.filter(c => c.status === 'In Progress').length;
+  const newComplaints = complaints.filter(c => c.status === 'Submitted' || c.status === 'Verified' || c.status === 'New').length;
+  const inProgressComplaints = complaints.filter(c => c.status === 'Maintenance Started' || c.status === 'In Progress').length;
   const resolvedComplaints = complaints.filter(c => c.status === 'Resolved').length;
-  const closedComplaints = complaints.filter(c => c.status === 'Closed').length;
+  const closedComplaints = complaints.filter(c => c.status === 'Confirmed' || c.status === 'Closed').length;
   const overdueComplaints = complaints.filter(c => isOverdue(c)).length;
 
   // Analytics Data
-  const statusData = complaintStatuses.map(status => ({
+  const statusData = [...backendStatuses, 'Pending'].map(status => ({
     name: status,
     value: complaints.filter(c => c.status === status).length
   })).filter(d => d.value > 0);
@@ -226,7 +207,7 @@ const Complaints = () => {
     setIsSaving(true);
     try {
       const payload = {
-        status: mapFrontendStatusToBackend(newStatus),
+        status: newStatus,
         remarks: resolutionRemarks
       };
       await api.patch(`/complaints/${selectedComplaint.id}/status`, payload);
@@ -420,7 +401,7 @@ const Complaints = () => {
           />
 
           <Select
-            options={[{ label: 'All Statuses', value: '' }, ...complaintStatuses.map(s => ({ label: s, value: s }))]}
+            options={[{ label: 'All Statuses', value: '' }, ...backendStatuses.map(s => ({ label: s, value: s }))]}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           />
@@ -523,12 +504,15 @@ const Complaints = () => {
           <Select 
             label="New Status" 
             required
-            options={complaintStatuses.map(s => ({ label: s, value: s }))}
+            options={[
+              ...backendStatuses.map(s => ({ label: s, value: s })),
+              ...(newStatus && !backendStatuses.includes(newStatus) ? [{ label: newStatus, value: newStatus }] : [])
+            ]}
             value={newStatus}
             onChange={(e) => setNewStatus(e.target.value)}
           />
 
-          {(newStatus === 'Resolved' || newStatus === 'Closed') && (
+          {(newStatus === 'Resolved' || newStatus === 'Confirmed' || newStatus === 'Closed') && (
             <div className="space-y-1">
               <label className="block text-sm font-medium text-gray-700">Resolution Remarks</label>
               <textarea

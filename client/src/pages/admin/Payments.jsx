@@ -224,31 +224,16 @@ const Payments = () => {
   };
 
   const columns = [
-    { header: 'Pay ID', accessor: 'id' },
-    { header: 'Household', accessor: 'householdName' },
+    { header: 'Date', accessor: 'paymentDate', render: (row) => row.paymentDate || '-' },
+    { header: 'Household / Customer', accessor: 'householdName' },
     { header: 'Village', accessor: 'village' },
-    { header: 'Billing Period', accessor: 'billingPeriod' },
     { 
-      header: 'Amount Due', 
+      header: 'Amount', 
       accessor: 'amountDue',
       render: (row) => formatCurrency(row.amountDue)
     },
     { 
-      header: 'Amount Paid', 
-      accessor: 'amountPaid',
-      render: (row) => formatCurrency(row.amountPaid)
-    },
-    { 
-      header: 'Balance', 
-      render: (row) => (
-        <span className={row.amountDue - row.amountPaid > 0 ? "text-red-600 font-medium" : "text-green-600 font-medium"}>
-          {formatCurrency(row.amountDue - row.amountPaid)}
-        </span>
-      )
-    },
-    { header: 'Date', accessor: 'paymentDate', render: (row) => row.paymentDate || '-' },
-    { 
-      header: 'Status', 
+      header: 'Payment Status', 
       accessor: 'status',
       render: (row) => (
         <Badge variant={getStatusBadgeVariant(row.status)}>
@@ -256,6 +241,8 @@ const Payments = () => {
         </Badge>
       )
     },
+    { header: 'Payment Method', accessor: 'paymentMethod', render: (row) => row.paymentMethod || '-' },
+    { header: 'Remarks', accessor: 'remarks', render: (row) => row.remarks || '-' },
     {
       header: 'Actions',
       render: (row) => (

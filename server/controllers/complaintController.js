@@ -261,6 +261,11 @@ const updateComplaintStatus = async (req, res, next) => {
   try {
     const { status, remarks } = req.body;
 
+    const allowedStatuses = Complaint.schema.path('status').enumValues;
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: `Invalid status: ${status}. Must be one of: ${allowedStatuses.join(', ')}` });
+    }
+
     let complaint = await Complaint.findById(req.params.id);
     if (!complaint) {
       return res.status(404).json({ success: false, message: 'Complaint not found' });

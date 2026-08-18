@@ -23,7 +23,11 @@ const getPumps = async (req, res, next) => {
 
     const total = await Pump.countDocuments(query);
     const pumps = await Pump.find(query)
-      .populate('village', 'name villageId')
+      .populate({
+        path: 'village',
+        select: 'name villageId assignedOperator',
+        populate: { path: 'assignedOperator', select: 'name' }
+      })
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });
@@ -43,7 +47,11 @@ const getPumps = async (req, res, next) => {
 // @access  Private
 const getPumpById = async (req, res, next) => {
   try {
-    const pump = await Pump.findById(req.params.id).populate('village', 'name villageId');
+    const pump = await Pump.findById(req.params.id).populate({
+      path: 'village',
+      select: 'name villageId assignedOperator',
+      populate: { path: 'assignedOperator', select: 'name' }
+    });
     if (!pump) {
       return res.status(404).json({ success: false, message: 'Pump not found' });
     }

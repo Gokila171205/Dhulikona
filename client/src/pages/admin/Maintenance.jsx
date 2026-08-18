@@ -258,25 +258,15 @@ const Maintenance = () => {
   };
 
   const columns = [
-    { header: 'MNT ID', accessor: 'id' },
-    { header: 'Pump ID', accessor: 'pumpId' },
+    { header: 'Date', accessor: 'scheduledDate' },
+    { header: 'Maintenance Type', accessor: 'maintenanceType' },
+    { header: 'Pump', accessor: 'pumpName' },
     { header: 'Village', accessor: 'village' },
-    { header: 'Type', accessor: 'maintenanceType' },
-    { 
-      header: 'Priority', 
-      accessor: 'priority',
-      render: (row) => (
-        <Badge variant={getPriorityBadgeVariant(row.priority)}>
-          {row.priority}
-        </Badge>
-      )
-    },
     { 
       header: 'Operator', 
       accessor: 'assignedOperator',
       render: (row) => row.assignedOperator || <span className="text-gray-400 italic">Unassigned</span>
     },
-    { header: 'Scheduled', accessor: 'scheduledDate' },
     { 
       header: 'Status', 
       accessor: 'status',
@@ -291,6 +281,8 @@ const Maintenance = () => {
         </div>
       )
     },
+    { header: 'Remarks', accessor: 'remarks', render: (row) => row.remarks || '-' },
+    { header: 'Completed Date', accessor: 'completionDate', render: (row) => row.completionDate || '-' },
     {
       header: 'Actions',
       render: (row) => (

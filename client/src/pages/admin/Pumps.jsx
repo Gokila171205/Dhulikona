@@ -56,7 +56,7 @@ const Pumps = () => {
         installationDate: p.installationDate ? p.installationDate.split('T')[0] : '',
         lastMaintenance: p.lastMaintenanceDate ? p.lastMaintenanceDate.split('T')[0] : 'None',
         status: p.status,
-        operator: p.operator || 'Unassigned'
+        operator: p.village?.assignedOperator?.name || 'Unassigned'
       }));
       setPumps(mapped);
       setError(null);
@@ -157,12 +157,9 @@ const Pumps = () => {
   };
 
   const columns = [
-    { header: 'Pump ID', accessor: 'id' },
     { header: 'Pump Name', accessor: 'name' },
     { header: 'Village', accessor: 'village' },
-    { header: 'Type', accessor: 'pumpType' },
-    { header: 'Installation', accessor: 'installationDate' },
-    { header: 'Last Maintenance', accessor: 'lastMaintenance' },
+    { header: 'Pump Type', accessor: 'pumpType' },
     { 
       header: 'Status', 
       accessor: 'status',
@@ -172,6 +169,8 @@ const Pumps = () => {
         </Badge>
       )
     },
+    { header: 'Last Maintenance', accessor: 'lastMaintenance' },
+    { header: 'Assigned Operator', accessor: 'operator' },
     {
       header: 'Actions',
       render: (row) => (

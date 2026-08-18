@@ -165,7 +165,6 @@ const AuditLogs = () => {
   };
 
   const columns = [
-    { header: 'Log ID', accessor: 'logId' },
     { 
       header: 'Date & Time', 
       render: (row) => (
@@ -200,6 +199,8 @@ const AuditLogs = () => {
       )
     },
     { header: 'Module', accessor: 'module' },
+    { header: 'Village', accessor: 'village', render: (row) => row.village || '-' },
+    { header: 'Description', accessor: 'description' },
     { 
       header: 'Result', 
       render: (row) => (

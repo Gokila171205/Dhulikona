@@ -153,12 +153,21 @@ const Notifications = () => {
   };
   const columns = [
     { 
-      header: 'ID / Date', 
+      header: 'Date', 
       render: (row) => (
-        <div>
-          <p className="font-semibold text-gray-800 text-xs">{row.id}</p>
-          <p className="text-[10px] text-gray-500">{formatDateTime(row.createdAt)}</p>
-        </div>
+        <span className="text-xs text-gray-500">{formatDateTime(row.createdAt)}</span>
+      )
+    },
+    { 
+      header: 'Title', 
+      render: (row) => (
+        <span className={`font-semibold ${row.status === 'Unread' ? 'text-gray-950 font-bold' : 'text-gray-600'}`}>{row.title}</span>
+      )
+    },
+    { 
+      header: 'Message', 
+      render: (row) => (
+        <p className="text-xs text-gray-500 truncate max-w-xs md:max-w-md">{row.message}</p>
       )
     },
     { 
@@ -170,18 +179,9 @@ const Notifications = () => {
       )
     },
     { 
-      header: 'Notification Details', 
+      header: 'Read/Unread', 
       render: (row) => (
-        <div className="max-w-xs md:max-w-md">
-          <p className={`font-semibold ${row.status === 'Unread' ? 'text-gray-900' : 'text-gray-600'}`}>{row.title}</p>
-          <p className="text-xs text-gray-500 truncate mt-0.5">{row.message}</p>
-        </div>
-      )
-    },
-    { 
-      header: 'Status', 
-      render: (row) => (
-        <span className={`text-xs font-bold uppercase ${row.status === 'Unread' ? 'text-gov-blue' : 'text-gray-400'}`}>
+        <span className={`text-xs font-bold uppercase ${row.status === 'Unread' ? 'text-gov-blue font-bold' : 'text-gray-400'}`}>
           {row.status}
         </span>
       )

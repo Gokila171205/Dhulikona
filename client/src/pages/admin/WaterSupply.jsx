@@ -227,11 +227,10 @@ const WaterSupply = () => {
   };
 
   const columns = [
-    { header: 'Record ID', accessor: 'id' },
+    { header: 'Supply Date', accessor: 'supplyDate' },
     { header: 'Village', accessor: 'village' },
-    { header: 'Date', accessor: 'supplyDate' },
     { 
-      header: 'Scheduled', 
+      header: 'Scheduled Time', 
       render: (row) => {
         if (row.scheduledStart === 'Not recorded' && row.scheduledEnd === 'Not recorded') {
           return 'Not recorded';
@@ -240,7 +239,7 @@ const WaterSupply = () => {
       }
     },
     { 
-      header: 'Actual', 
+      header: 'Actual Time', 
       render: (row) => {
         if ((row.actualStart === 'Not recorded' && row.actualEnd === 'Not recorded') || (row.actualStart === '-' && row.actualEnd === '-')) {
           return 'Not recorded';
@@ -248,7 +247,7 @@ const WaterSupply = () => {
         return `${row.actualStart} - ${row.actualEnd}`;
       }
     },
-    { header: 'Freq.', accessor: 'frequency' },
+    { header: 'Frequency', accessor: 'frequency' },
     { 
       header: 'Status', 
       accessor: 'status',
@@ -259,6 +258,7 @@ const WaterSupply = () => {
       )
     },
     { header: 'Recorded By', accessor: 'recordedBy' },
+    { header: 'Remarks', accessor: 'remarks' },
     {
       header: 'Actions',
       render: (row) => (

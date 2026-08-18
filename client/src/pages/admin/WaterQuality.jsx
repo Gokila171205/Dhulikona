@@ -201,16 +201,10 @@ const WaterQuality = () => {
   };
 
   const columns = [
-    { header: 'Test ID', accessor: 'id' },
-    { header: 'Village', accessor: 'village' },
     { header: 'Date', accessor: 'testDate' },
-    { header: 'Tested By', accessor: 'testedBy' },
-    { header: 'pH', accessor: 'ph' },
-    { header: 'Turbidity', accessor: 'turbidity' },
-    { header: 'TDS (mg/L)', accessor: 'tds' },
-    { header: 'Chlorine', accessor: 'chlorine' },
+    { header: 'Village', accessor: 'village' },
     { 
-      header: 'Status', 
+      header: 'Test Result / Quality Status', 
       accessor: 'status',
       render: (row) => (
         <Badge variant={getStatusBadgeVariant(row.status)}>
@@ -218,6 +212,12 @@ const WaterQuality = () => {
         </Badge>
       )
     },
+    { header: 'pH', accessor: 'ph' },
+    { header: 'TDS (mg/L)', accessor: 'tds' },
+    { header: 'Turbidity', accessor: 'turbidity' },
+    { header: 'Chlorine', accessor: 'chlorine' },
+    { header: 'Recorded By', accessor: 'testedBy' },
+    { header: 'Remarks', accessor: 'remarks' },
     {
       header: 'Actions',
       render: (row) => (
