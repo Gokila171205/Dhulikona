@@ -1,21 +1,29 @@
 const express = require('express');
 
-
-const {
-  getWaterSupplies,
-  getWaterSupplyById,
-  createWaterSupply
-} = require('../controllers/waterSupplyController');
-
 const router = express.Router();
 
-// Get all water supply records
-router.get('/', getWaterSupplies);
+const {
+  getWaterSupply,
+  getWaterSupplyById,
+  createWaterSupply,
+  updateWaterSupply
+} = require('../controllers/waterSupplyController');
 
-// Get one water supply record
-router.get('/:id', getWaterSupplyById);
+const { protect } = require('../middleware/authMiddleware');
 
-// Create water supply record
-router.post('/', createWaterSupply);
+// All water supply routes require authentication
+router.use(protect);
+
+// GET all records
+// POST new record
+router.route('/')
+  .get(getWaterSupply)
+  .post(createWaterSupply);
+
+// GET one record
+// PUT update record
+router.route('/:id')
+  .get(getWaterSupplyById)
+  .put(updateWaterSupply);
 
 module.exports = router;

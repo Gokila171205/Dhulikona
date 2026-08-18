@@ -1,169 +1,318 @@
-import React from 'react';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, Legend
-} from 'recharts';
+import React, { useState, useEffect } from 'react';
 import Card from '../../components/ui/Card';
-import { MapPin, Users, Droplet, Wrench, AlertTriangle, CheckCircle, IndianRupee, Activity } from 'lucide-react';
+import Badge from '../../components/ui/Badge';
+import Table from '../../components/ui/Table';
+import Button from '../../components/ui/Button';
+import BarChart from '../../components/charts/BarChart';
+import PieChart from '../../components/charts/PieChart';
+import { Activity, AlertTriangle, Users, Home, Map, CheckCircle, Clock } from 'lucide-react';
+import api from '../../services/api';
+
+const SkeletonCard = () => (
+  <Card className="p-4 flex items-center justify-between animate-pulse border border-gray-100">
+    <div className="space-y-2 flex-1">
+      <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+      <div className="h-8 bg-gray-300 rounded w-1/3"></div>
+    </div>
+    <div className="p-3 rounded-full bg-gray-200 h-12 w-12"></div>
+  </Card>
+);
+
+const SkeletonChart = () => (
+  <div className="w-full h-64 bg-gray-50 rounded-lg animate-pulse flex items-center justify-center border border-gray-100">
+    <div className="w-16 h-16 rounded-full border-4 border-gray-200 border-t-gov-blue animate-spin"></div>
+  </div>
+);
 
 const AdminDashboard = () => {
-  // Mock Data
-  const summaryData = [
-    { title: 'Total Villages', value: '24', icon: MapPin, color: 'text-gov-blue', bg: 'bg-gov-blue/10' },
-    { title: 'Total Users', value: '1,432', icon: Users, color: 'text-water-blue', bg: 'bg-water-blue/10' },
-    { title: 'Total Pumps', value: '86', icon: Wrench, color: 'text-indigo-600', bg: 'bg-indigo-600/10' },
-    { title: 'Working Pumps', value: '72', icon: CheckCircle, color: 'text-success', bg: 'bg-success/10' },
-    { title: 'Pending Complaints', value: '14', icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10' },
-    { title: 'Water Quality Alerts', value: '2', icon: Activity, color: 'text-danger', bg: 'bg-danger/10' },
-    { title: 'Daily Supply (L)', value: '45,000', icon: Droplet, color: 'text-water-light', bg: 'bg-water-light/10' },
-    { title: 'Fee Collection', value: '86%', icon: IndianRupee, color: 'text-green-600', bg: 'bg-green-600/10' },
+  const [analytics, setAnalytics] = useState(null);
+  const [recentComplaints, setRecentComplaints] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [complaintsLoading, setComplaintsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [complaintsError, setComplaintsError] = useState(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const res = await api.get('/analytics/dashboard');
+        setAnalytics(res.data);
+      } catch (err) {
+        setError('Unable to load dashboard statistics.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAnalytics();
+  }, [retryTrigger]);
+
+  useEffect(() => {
+    const fetchRecentComplaints = async () => {
+      try {
+        setComplaintsLoading(true);
+        setComplaintsError(null);
+        const res = await api.get('/complaints', { params: { limit: 5 } });
+        setRecentComplaints(res.data);
+      } catch (err) {
+        setComplaintsError('Unable to load recent complaints.');
+      } finally {
+        setComplaintsLoading(false);
+      }
+    };
+    fetchRecentComplaints();
+  }, [retryTrigger]);
+
+  const complaintColumns = [
+    { header: 'ID', accessor: 'id' },
+    { header: 'Village', accessor: 'village' },
+    { header: 'Issue', accessor: 'issue' },
+    { 
+      header: 'Status', 
+      accessor: 'status',
+      render: (row) => {
+        let variant = 'default';
+        if (row.status === 'Resolved') variant = 'success';
+        if (row.status === 'Pending') variant = 'danger';
+        if (row.status === 'In Progress') variant = 'warning';
+        return <Badge variant={variant}>{row.status}</Badge>;
+      }
+    },
+    { header: 'Date', accessor: 'date' }
   ];
 
-  const waterSupplyData = [
-    { name: 'Mon', supply: 42000 },
-    { name: 'Tue', supply: 43500 },
-    { name: 'Wed', supply: 45000 },
-    { name: 'Thu', supply: 41000 },
-    { name: 'Fri', supply: 46000 },
-    { name: 'Sat', supply: 48000 },
-    { name: 'Sun', supply: 44000 },
+  if (error) {
+    return (
+      <div className="p-8 text-center max-w-md mx-auto bg-red-50 text-red-700 rounded-lg border border-red-200 mt-10 space-y-4">
+        <AlertTriangle className="mx-auto text-red-500" size={48} />
+        <h3 className="text-lg font-bold">Error</h3>
+        <p className="text-sm">{error}</p>
+        <Button variant="primary" onClick={() => setRetryTrigger(prev => prev + 1)}>
+          Retry Loading
+        </Button>
+      </div>
+    );
+  }
+
+  // Map real data for available modules
+  const summaryCards = [
+    { id: 'totalUsers', title: 'Total Users', value: analytics?.users?.total ?? 0, icon: Users, bg: 'bg-blue-100', color: 'text-blue-600', available: true },
+    { id: 'activeUsers', title: 'Active Users', value: analytics?.users?.active ?? 0, icon: Users, bg: 'bg-green-100', color: 'text-green-600', available: true },
+    { id: 'inactiveUsers', title: 'Inactive Users', value: analytics?.users?.inactive ?? 0, icon: Users, bg: 'bg-red-100', color: 'text-red-600', available: true },
+    
+    { id: 'totalVillages', title: 'Total Villages', value: analytics?.villages?.total ?? 0, icon: Map, bg: 'bg-indigo-100', color: 'text-indigo-600', available: true },
+    { id: 'activeVillages', title: 'Active Villages', value: analytics?.villages?.active ?? 0, icon: Map, bg: 'bg-green-100', color: 'text-green-600', available: true },
+    { id: 'inactiveVillages', title: 'Inactive Villages', value: analytics?.villages?.inactive ?? 0, icon: Map, bg: 'bg-red-100', color: 'text-red-600', available: true },
+
+    { id: 'totalHouseholds', title: 'Total Households', value: analytics?.households?.total ?? 0, icon: Home, bg: 'bg-teal-100', color: 'text-teal-600', available: true },
+    
+    // Future modules with backend available checks
+    { 
+      id: 'totalPumps', 
+      title: 'Total Pumps', 
+      value: analytics?.pumps?.available ? (analytics?.pumps?.total ?? 0) : 'Data not available', 
+      icon: Activity, 
+      bg: 'bg-gray-100', 
+      color: 'text-gray-400', 
+      available: !!analytics?.pumps?.available 
+    },
+    { 
+      id: 'workingPumps', 
+      title: 'Working Pumps', 
+      value: analytics?.pumps?.available ? (analytics?.pumps?.working ?? 0) : 'Data not available', 
+      icon: CheckCircle, 
+      bg: 'bg-gray-100', 
+      color: 'text-gray-400', 
+      available: !!analytics?.pumps?.available 
+    },
+    { 
+      id: 'pumpsUnderMaintenance', 
+      title: 'Pumps Under Maintenance', 
+      value: analytics?.pumps?.available ? (analytics?.pumps?.maintenance ?? 0) : 'Data not available', 
+      icon: AlertTriangle, 
+      bg: 'bg-gray-100', 
+      color: 'text-gray-400', 
+      available: !!analytics?.pumps?.available 
+    },
+    { 
+      id: 'pendingComplaints', 
+      title: 'Pending Complaints', 
+      value: analytics?.complaints?.available ? (analytics?.complaints?.pending ?? 0) : 'Data not available', 
+      icon: Clock, 
+      bg: 'bg-gray-100', 
+      color: 'text-gray-400', 
+      available: !!analytics?.complaints?.available 
+    },
+    { 
+      id: 'resolvedComplaints', 
+      title: 'Resolved Complaints', 
+      value: analytics?.complaints?.available ? (analytics?.complaints?.resolved ?? 0) : 'Data not available', 
+      icon: CheckCircle, 
+      bg: 'bg-gray-100', 
+      color: 'text-gray-400', 
+      available: !!analytics?.complaints?.available 
+    },
   ];
 
-  const complaintsData = [
-    { name: 'Resolved', value: 118 },
-    { name: 'Pending', value: 14 },
-    { name: 'In Progress', value: 10 },
-  ];
-  
-  const COLORS = ['#166534', '#DC2626', '#D97706'];
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return 'N/A';
+      const day = date.getDate().toString().padStart(2, '0');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[date.getMonth()];
+      const year = date.getFullYear();
+      let hours = date.getHours();
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      return `${day} ${month} ${year} · ${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+    } catch (e) {
+      return 'N/A';
+    }
+  };
 
-  const recentActivity = [
-    { id: 1, action: 'Complaint resolved', entity: 'Pump #42 (Sonapur)', time: '2 hours ago', user: 'Operator Raj' },
-    { id: 2, action: 'Water quality tested', entity: 'Village: Kamalpur - pH 7.2', time: '4 hours ago', user: 'Tech Priya' },
-    { id: 3, action: 'New pump installed', entity: 'Village: Hajo', time: '1 day ago', user: 'Admin User' },
-    { id: 4, action: 'Maintenance started', entity: 'Pump #15 (Raha)', time: '1 day ago', user: 'Operator Amit' },
-  ];
+  const formattedComplaints = recentComplaints.map(c => {
+    let displayStatus = c.status;
+    if (c.status === 'Submitted' || c.status === 'Verified') displayStatus = 'Pending';
+    if (c.status === 'Maintenance Started') displayStatus = 'In Progress';
+    if (c.status === 'Confirmed') displayStatus = 'Closed';
+
+    return {
+      id: c.id ? `${c.id.substring(0, 8)}...` : (c._id ? `${c._id.toString().substring(0, 8)}...` : 'N/A'),
+      village: c.villageName || c.village?.name || 'Not specified',
+      issue: c.title || 'Not specified',
+      status: displayStatus,
+      date: formatDateTime(c.createdAt)
+    };
+  });
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Admin Dashboard</h2>
-          <p className="text-gray-500 text-sm">Overview of JalTrack system performance</p>
-        </div>
-        <div className="text-sm bg-white border border-gray-200 px-4 py-2 rounded-md shadow-sm">
-          <span className="font-medium">Date: </span> {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          <p className="text-gray-500 text-sm">System-wide monitoring overview</p>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {summaryData.map((item, index) => (
-          <Card key={index} className="p-4 flex items-center justify-between hover:shadow-md transition-shadow">
-            <div>
-              <p className="text-sm font-medium text-gray-500">{item.title}</p>
-              <h3 className="text-2xl font-bold text-gray-900 mt-1">{item.value}</h3>
-            </div>
-            <div className={`p-3 rounded-full ${item.bg} ${item.color}`}>
-              <item.icon size={24} />
-            </div>
-          </Card>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {loading
+          ? Array.from({ length: 12 }).map((_, index) => <SkeletonCard key={index} />)
+          : summaryCards.map((item) => (
+              <Card key={item.id} className={`p-4 flex items-center justify-between transition-shadow ${item.available ? 'hover:shadow-md' : 'opacity-75'}`}>
+                <div>
+                  <p className="text-sm font-medium text-gray-500 flex items-center gap-2">
+                    {item.title}
+                    {!item.available && <Badge variant="default" className="text-[10px]">Coming Soon</Badge>}
+                  </p>
+                  <h3 className={`text-2xl font-bold mt-1 ${item.available ? 'text-gray-900' : 'text-gray-400'}`}>{item.value}</h3>
+                </div>
+                <div className={`p-3 rounded-full ${item.bg} ${item.color}`}>
+                  <item.icon size={24} />
+                </div>
+              </Card>
+            ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Water Supply Chart */}
-        <Card className="p-5 lg:col-span-2 flex flex-col">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Weekly Water Supply Performance</h3>
-          <div className="flex-1 min-h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={waterSupplyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
-                <Tooltip 
-                  cursor={{ fill: '#F3F4F6' }} 
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
-                />
-                <Bar dataKey="supply" fill="#0085CA" radius={[4, 4, 0, 0]} name="Supply (Liters)" barSize={40} />
-              </BarChart>
-            </ResponsiveContainer>
+        {/* Real Users Role Chart */}
+        <Card className="p-5 flex flex-col">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Users by Role</h3>
+          <div className="flex-1 min-h-[300px] flex items-center justify-center">
+            {loading ? (
+              <SkeletonChart />
+            ) : analytics?.charts?.usersByRole ? (
+              <PieChart data={[
+                { name: 'Admins', value: analytics.charts.usersByRole.admins, color: '#ef4444' },
+                { name: 'Operators', value: analytics.charts.usersByRole.operators, color: '#3b82f6' },
+                { name: 'Villagers', value: analytics.charts.usersByRole.villagers, color: '#10b981' }
+              ].filter(d => d.value > 0)} />
+            ) : (
+              <p className="text-gray-400 text-sm">No data available</p>
+            )}
           </div>
         </Card>
 
-        {/* Complaints Chart */}
+        {/* Real Villages Status Chart */}
         <Card className="p-5 flex flex-col">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Complaint Status</h3>
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Villages by Status</h3>
           <div className="flex-1 min-h-[300px] flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={complaintsData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {complaintsData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                <Legend verticalAlign="bottom" height={36} iconType="circle" />
-              </PieChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <SkeletonChart />
+            ) : analytics?.charts?.villagesByStatus ? (
+              <PieChart data={[
+                { name: 'Active', value: analytics.charts.villagesByStatus.active, color: '#10b981' },
+                { name: 'Inactive', value: analytics.charts.villagesByStatus.inactive, color: '#f59e0b' }
+              ].filter(d => d.value > 0)} />
+            ) : (
+              <p className="text-gray-400 text-sm">No data available</p>
+            )}
+          </div>
+        </Card>
+
+        {/* Placeholder for Water Supply */}
+        <Card className="p-5 flex flex-col relative overflow-hidden bg-gray-50 border-dashed border-gray-300">
+          {(!loading && !analytics?.waterSupply?.available) && (
+            <div className="absolute inset-0 bg-white/50 z-10 flex flex-col items-center justify-center backdrop-blur-[1px]">
+              <Badge variant="default" className="mb-2">Coming Soon</Badge>
+              <p className="text-sm font-medium text-gray-600 text-center px-4">Water Supply tracking will be available in Phase 2.</p>
+            </div>
+          )}
+          <h3 className="text-lg font-semibold text-gray-800 mb-4 opacity-30">Water Supply Performance</h3>
+          <div className="flex-1 min-h-[250px] opacity-20">
+            {loading ? (
+              <SkeletonChart />
+            ) : (
+              <BarChart 
+                data={[{name: 'Jan', supply: 100}, {name: 'Feb', supply: 120}]} 
+                xAxisKey="name" 
+                dataKey="supply" 
+                name="Supply (Liters)" 
+                fill="#0085CA" 
+              />
+            )}
           </div>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activity List */}
-        <Card className="p-5">
+        {/* Recent Complaints */}
+        <Card className="p-5 overflow-hidden flex flex-col relative bg-white border border-gray-200">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-800">Recent System Activity</h3>
-            <button className="text-sm text-gov-blue hover:underline font-medium">View All</button>
+            <h3 className="text-lg font-semibold text-gray-800">Recent Complaints</h3>
           </div>
-          <div className="space-y-4">
-            {recentActivity.map((activity) => (
-              <div key={activity.id} className="flex items-start gap-4 border-b border-gray-100 last:border-0 pb-3 last:pb-0">
-                <div className="bg-gray-100 p-2 rounded-full mt-1 text-gray-600">
-                  <Activity size={16} />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                  <p className="text-xs text-gray-500 mt-1">{activity.entity}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-medium text-gray-500">{activity.time}</p>
-                  <p className="text-xs text-gray-400 mt-1">{activity.user}</p>
-                </div>
+          <div className="flex-1 overflow-auto">
+            {complaintsLoading ? (
+              <div className="h-32 bg-gray-200 animate-pulse rounded"></div>
+            ) : complaintsError ? (
+              <div className="text-center py-6 text-red-500 text-sm">
+                {complaintsError}
               </div>
-            ))}
+            ) : (
+              <Table columns={complaintColumns} data={formattedComplaints} keyExtractor={(row) => row.id} />
+            )}
           </div>
         </Card>
-        
-        {/* Alerts/Notifications */}
-        <Card className="p-5 bg-gov-blue text-white">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <AlertTriangle size={20} className="text-warning" />
-            Attention Required
+
+        {/* System Activity */}
+        <Card className="p-5">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+            <Activity size={20} className="text-gov-blue" />
+            System Activity Tracking
           </h3>
-          <ul className="space-y-3">
-            <li className="bg-white/10 p-3 rounded-md border border-white/20">
-              <p className="font-medium text-sm">Pump failure in Sonapur Village</p>
-              <p className="text-xs text-blue-200 mt-1">Reported 2 hours ago. Affecting 45 households.</p>
-            </li>
-            <li className="bg-white/10 p-3 rounded-md border border-white/20">
-              <p className="font-medium text-sm">Low fee collection in Raha</p>
-              <p className="text-xs text-blue-200 mt-1">Current collection is at 45% for the month.</p>
-            </li>
-            <li className="bg-white/10 p-3 rounded-md border border-white/20">
-              <p className="font-medium text-sm">Pending Verification</p>
-              <p className="text-xs text-blue-200 mt-1">3 new users waiting for approval.</p>
-            </li>
-          </ul>
+          <div className="flex-1 min-h-[200px] flex flex-col items-center justify-center text-center p-6 bg-blue-50 rounded-lg border border-blue-100">
+            <Activity size={32} className="text-blue-300 mb-2" />
+            <p className="text-gray-600 text-sm">System activity is tracked centrally via Audit Logs.</p>
+            <p className="text-gov-blue font-medium mt-2 cursor-pointer hover:underline" onClick={() => window.location.href='/admin/audit-logs'}>
+              View Audit Logs →
+            </p>
+          </div>
         </Card>
       </div>
     </div>

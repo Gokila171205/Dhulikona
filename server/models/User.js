@@ -14,7 +14,9 @@ const userSchema = new mongoose.Schema(
     },
 
     phone: {
-      type: String
+      type: String,
+      required: true,
+      unique: true
     },
 
     password: {
@@ -25,6 +27,7 @@ const userSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: ['villager', 'operator', 'admin'],
+      default: 'villager',
       required: true
     },
 
@@ -43,5 +46,10 @@ const userSchema = new mongoose.Schema(
     timestamps: true
   }
 );
+
+// Indexes
+userSchema.index({ role: 1 });
+userSchema.index({ village: 1 });
+userSchema.index({ status: 1 });
 
 module.exports = mongoose.model('User', userSchema);

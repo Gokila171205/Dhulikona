@@ -1,14 +1,25 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Droplets, User, ShieldCheck, HardHat, Lock, Mail } from 'lucide-react';
+import {
+  Droplets,
+  User,
+  ShieldCheck,
+  HardHat,
+  Lock,
+  Mail
+} from 'lucide-react';
+
+import { useAuth } from '../../context/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const [role, setRole] = useState('VILLAGER');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const roles = [
     {
@@ -31,7 +42,7 @@ const Login = () => {
     },
   ];
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -40,19 +51,33 @@ const Login = () => {
       return;
     }
 
-    if (role === 'VILLAGER') {
-      navigate('/villager');
-      return;
-    }
+    setIsLoading(true);
 
-    if (role === 'OPERATOR') {
-      navigate('/operator');
-      return;
-    }
+    try {
+      /*
+       * AuthContext currently expects phone/password.
+       * If your backend login API uses email instead, change
+       * this to login(email, password).
+       */
+      const user = await login(email, password);
 
-    if (role === 'ADMIN') {
-      navigate('/admin');
-      return;
+      const userRole = String(user.role || '').toLowerCase();
+
+      if (userRole === 'admin') {
+        navigate('/admin');
+      } else if (userRole === 'operator') {
+        navigate('/operator');
+      } else {
+        navigate('/villager');
+      }
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to connect to server.'
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -208,7 +233,7 @@ const Login = () => {
 
                 <form onSubmit={handleLogin} className="space-y-5">
 
-                  {/* Email */}
+                  {/* Email / Login ID */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Email Address
@@ -222,10 +247,11 @@ const Login = () => {
                       />
 
                       <input
-                        type="email"
+                        type="text"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="Enter your email"
+                        disabled={isLoading}
                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-water-blue/30 focus:border-water-blue"
                       />
 
@@ -250,6 +276,7 @@ const Login = () => {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Enter your password"
+                        disabled={isLoading}
                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-water-blue/30 focus:border-water-blue"
                       />
 
@@ -266,9 +293,10 @@ const Login = () => {
                   {/* Login */}
                   <button
                     type="submit"
-                    className="w-full bg-water-blue hover:bg-gov-light text-white font-semibold py-3 rounded-lg transition-colors shadow-sm"
+                    disabled={isLoading}
+                    className="w-full bg-water-blue hover:bg-gov-light disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors shadow-sm"
                   >
-                    Sign In
+                    {isLoading ? 'Signing in...' : 'Sign In'}
                   </button>
 
                 </form>

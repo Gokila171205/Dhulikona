@@ -1,89 +1,193 @@
 const WaterSupply = require('../models/WaterSupply');
+const { createAuditLog } = require('../services/auditService');
 
 // Get all water supply records
-const getWaterSupplies = async (req, res) => {
+const getWaterSupply = async (req, res, next) => {
   try {
-    const supplies = await WaterSupply.find()
-      .sort({ date: -1, createdAt: -1 });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-    res.status(200).json(supplies);
-  } catch (error) {
-    console.error('Error fetching water supplies:', error);
+    const query = {};
 
-    res.status(500).json({
-      message: 'Failed to fetch water supply records',
-      error: error.message
+    if (req.query.status) {
+      query.status = req.query.status;
+    }
+
+    if (req.query.village) {
+      query.village = req.query.village;
+    }
+
+    if (req.query.search) {
+      query.remarks = {
+        $regex: req.query.search,
+        $options: 'i'
+      };
+    }
+
+    const total = await WaterSupply.countDocuments(query);
+
+    const records = await WaterSupply.find(query)
+      .populate('village', 'name villageId')
+      .populate('recordedBy', 'name phone userId')
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: records,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
     });
+  } catch (error) {
+    next(error);
   }
 };
 
 // Get one water supply record
-const getWaterSupplyById = async (req, res) => {
+const getWaterSupplyById = async (req, res, next) => {
   try {
-    const supply = await WaterSupply.findById(req.params.id);
+    const record = await WaterSupply.findById(req.params.id)
+      .populate('village', 'name villageId')
+      .populate('recordedBy', 'name phone userId');
 
-    if (!supply) {
+    if (!record) {
       return res.status(404).json({
+        success: false,
         message: 'Water supply record not found'
       });
     }
 
-    res.status(200).json(supply);
-  } catch (error) {
-    console.error('Error fetching water supply:', error);
-
-    res.status(500).json({
-      message: 'Failed to fetch water supply record',
-      error: error.message
+    res.json({
+      success: true,
+      data: record
     });
+  } catch (error) {
+    next(error);
   }
 };
 
 // Create water supply record
-const createWaterSupply = async (req, res) => {
+const createWaterSupply = async (req, res, next) => {
   try {
     const {
-      date,
-      startTime,
-      endTime,
-      area,
-      pump,
+      village,
+      supplyDate,
+      scheduledStart,
+      scheduledEnd,
+      actualStart,
+      actualEnd,
+      frequency,
       status,
       remarks
     } = req.body;
 
-    if (!date || !startTime || !endTime || !area || !pump) {
+    if (!village || !supplyDate) {
       return res.status(400).json({
-        message: 'Date, start time, end time, area and pump are required'
+        success: false,
+        message: 'Village and supply date are required'
       });
     }
 
-    const supply = await WaterSupply.create({
-      date,
-      startTime,
-      endTime,
-      area,
-      pump,
+    const record = await WaterSupply.create({
+      village,
+      supplyDate,
+      scheduledStart,
+      scheduledEnd,
+      actualStart,
+      actualEnd,
+      frequency,
       status,
+      recordedBy: req.user?._id,
       remarks
     });
 
+    await record.populate([
+      {
+        path: 'village',
+        select: 'name villageId'
+      },
+      {
+        path: 'recordedBy',
+        select: 'name phone userId'
+      }
+    ]);
+
+    if (req.user) {
+      await createAuditLog({
+        userId: req.user._id,
+        userName: req.user.name,
+        role: req.user.role,
+        action: 'CREATE',
+        module: 'WATER_SUPPLY',
+        description: `Recorded water supply log for date ${supplyDate} (${status})`,
+        result: 'SUCCESS',
+        relatedRecordId: record._id.toString()
+      });
+    }
+
     res.status(201).json({
-      message: 'Water supply record created successfully',
-      supply
+      success: true,
+      data: record
     });
   } catch (error) {
-    console.error('Error creating water supply:', error);
+    next(error);
+  }
+};
 
-    res.status(500).json({
-      message: 'Failed to create water supply record',
-      error: error.message
+// Update water supply record
+const updateWaterSupply = async (req, res, next) => {
+  try {
+    let record = await WaterSupply.findById(req.params.id);
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        message: 'Record not found'
+      });
+    }
+
+    record = await WaterSupply.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      {
+        new: true,
+        runValidators: true
+      }
+    )
+      .populate('village', 'name villageId')
+      .populate('recordedBy', 'name phone userId');
+
+    if (req.user) {
+      await createAuditLog({
+        userId: req.user._id,
+        userName: req.user.name,
+        role: req.user.role,
+        action: 'UPDATE',
+        module: 'WATER_SUPPLY',
+        description: `Updated water supply log status to: ${record.status}`,
+        result: 'SUCCESS',
+        relatedRecordId: record._id.toString()
+      });
+    }
+
+    res.json({
+      success: true,
+      data: record
     });
+  } catch (error) {
+    next(error);
   }
 };
 
 module.exports = {
-  getWaterSupplies,
+  getWaterSupply,
   getWaterSupplyById,
-  createWaterSupply
+  createWaterSupply,
+  updateWaterSupply
 };
