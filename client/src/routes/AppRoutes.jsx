@@ -2,6 +2,9 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import DashboardLayout from '../components/layout/DashboardLayout';
 
+// Login
+import Login from '../pages/auth/Login';
+
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard';
 
@@ -15,7 +18,7 @@ import WaterQuality from '../pages/villager/WaterQuality';
 import PaymentStatus from '../pages/villager/PaymentStatus';
 import Notifications from '../pages/villager/Notifications';
 
-// Placeholders for other pages
+// Placeholder
 const Placeholder = ({ title }) => (
   <div className="flex items-center justify-center h-full min-h-[400px]">
     <h2 className="text-2xl font-semibold text-gray-500">
@@ -27,56 +30,84 @@ const Placeholder = ({ title }) => (
 const AppRoutes = () => {
   return (
     <Routes>
-      {/* Default Route */}
-      <Route path="/" element={<Navigate to="/admin" replace />} />
+
+      {/* ================= DEFAULT ROUTE ================= */}
+      <Route
+        path="/"
+        element={<Navigate to="/login" replace />}
+      />
+
+      {/* ================= LOGIN ================= */}
+      <Route
+        path="/login"
+        element={<Login />}
+      />
 
       {/* ================= ADMIN ROUTES ================= */}
-      <Route path="/admin" element={<DashboardLayout role="ADMIN" />}>
-        <Route index element={<AdminDashboard />} />
+      <Route
+        path="/admin"
+        element={<DashboardLayout role="ADMIN" />}
+      >
+        <Route
+          index
+          element={<AdminDashboard />}
+        />
+
         <Route
           path="villages"
           element={<Placeholder title="Villages Management" />}
         />
+
         <Route
           path="users"
           element={<Placeholder title="Users Management" />}
         />
+
         <Route
           path="pumps"
           element={<Placeholder title="Pumps Management" />}
         />
+
         <Route
           path="water-supply"
           element={<Placeholder title="Water Supply Logs" />}
         />
+
         <Route
           path="water-quality"
           element={<Placeholder title="Water Quality Testing" />}
         />
+
         <Route
           path="complaints"
           element={<Placeholder title="Complaints Tracking" />}
         />
+
         <Route
           path="maintenance"
           element={<Placeholder title="Maintenance Scheduling" />}
         />
+
         <Route
           path="payments"
           element={<Placeholder title="Payment Collection" />}
         />
+
         <Route
           path="analytics"
           element={<Placeholder title="System Analytics" />}
         />
+
         <Route
           path="reports"
           element={<Placeholder title="Generated Reports" />}
         />
+
         <Route
           path="notifications"
           element={<Placeholder title="System Notifications" />}
         />
+
         <Route
           path="audit-logs"
           element={<Placeholder title="Audit Logs" />}
@@ -84,7 +115,10 @@ const AppRoutes = () => {
       </Route>
 
       {/* ================= OPERATOR ROUTES ================= */}
-      <Route path="/operator" element={<DashboardLayout role="OPERATOR" />}>
+      <Route
+        path="/operator"
+        element={<DashboardLayout role="OPERATOR" />}
+      >
         <Route
           index
           element={<Placeholder title="Operator Dashboard" />}
@@ -92,10 +126,16 @@ const AppRoutes = () => {
       </Route>
 
       {/* ================= VILLAGER ROUTES ================= */}
-      <Route path="/villager" element={<DashboardLayout role="VILLAGER" />}>
-        
+      <Route
+        path="/villager"
+        element={<DashboardLayout role="VILLAGER" />}
+      >
+
         {/* Dashboard */}
-        <Route index element={<VillagerDashboard />} />
+        <Route
+          index
+          element={<VillagerDashboard />}
+        />
 
         {/* Water Supply */}
         <Route
@@ -150,6 +190,7 @@ const AppRoutes = () => {
           </div>
         }
       />
+
     </Routes>
   );
 };
