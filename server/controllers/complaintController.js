@@ -1,6 +1,111 @@
 const Complaint = require('../models/Complaint');
 const { createAuditLog } = require('../services/auditService');
 
+const mapComplaint = (c) => {
+  if (!c) return null;
+
+  // Resolve village
+  let villageObj = null;
+  if (c.village) {
+    if (c.village.name) {
+      villageObj = {
+        _id: c.village._id,
+        villageId: c.village.villageId,
+        name: c.village.name,
+        district: c.village.district,
+        block: c.village.block
+      };
+    } else {
+      villageObj = {
+        _id: c.village.toString(),
+        name: 'Village unavailable'
+      };
+    }
+  } else {
+    const rawId = c.populated ? c.populated('village') : (c._doc ? c._doc.village : null);
+    if (rawId) {
+      villageObj = {
+        _id: rawId.toString(),
+        name: 'Village unavailable'
+      };
+    }
+  }
+
+  // Resolve reportedBy
+  let reportedByObj = null;
+  if (c.reportedBy) {
+    if (c.reportedBy.name) {
+      reportedByObj = {
+        _id: c.reportedBy._id,
+        userId: c.reportedBy.userId,
+        name: c.reportedBy.name,
+        role: c.reportedBy.role,
+        phone: c.reportedBy.phone
+      };
+    } else {
+      reportedByObj = {
+        _id: c.reportedBy.toString(),
+        name: 'Reporter unavailable'
+      };
+    }
+  } else {
+    const rawId = c.populated ? c.populated('reportedBy') : (c._doc ? c._doc.reportedBy : null);
+    if (rawId) {
+      reportedByObj = {
+        _id: rawId.toString(),
+        name: 'Reporter unavailable'
+      };
+    }
+  }
+
+  // Resolve assignedTo
+  let assignedToObj = null;
+  if (c.assignedTo) {
+    if (c.assignedTo.name) {
+      assignedToObj = {
+        _id: c.assignedTo._id,
+        userId: c.assignedTo.userId,
+        name: c.assignedTo.name,
+        role: c.assignedTo.role,
+        phone: c.assignedTo.phone
+      };
+    } else {
+      assignedToObj = {
+        _id: c.assignedTo.toString(),
+        name: 'Operator unavailable'
+      };
+    }
+  } else {
+    const rawId = c.populated ? c.populated('assignedTo') : (c._doc ? c._doc.assignedTo : null);
+    if (rawId) {
+      assignedToObj = {
+        _id: rawId.toString(),
+        name: 'Operator unavailable'
+      };
+    }
+  }
+
+  return {
+    _id: c._id,
+    id: c._id.toString(),
+    complaintId: c._id.toString(),
+    title: c.title,
+    description: c.description,
+    status: c.status,
+    createdAt: c.createdAt,
+    updatedAt: c.updatedAt,
+    resolvedAt: c.resolvedAt,
+    confirmedAt: c.confirmedAt,
+    location: c.location,
+    date: c.date,
+    village: villageObj,
+    reportedBy: reportedByObj,
+    assignedTo: assignedToObj,
+    remarks: c.remarks || '',
+    resolutionRemarks: c.remarks || ''
+  };
+};
+
 // @desc    Get all complaints with pagination/filters
 // @route   GET /api/complaints
 // @access  Private
@@ -43,27 +148,6 @@ const getComplaints = async (req, res, next) => {
       .limit(limit)
       .sort({ createdAt: -1 });
 
-    const mapComplaint = (c) => ({
-      _id: c._id,
-      id: c._id.toString(),
-      complaintId: c._id.toString(),
-      title: c.title,
-      description: c.description,
-      status: c.status,
-      createdAt: c.createdAt,
-      updatedAt: c.updatedAt,
-      resolvedAt: c.resolvedAt,
-      confirmedAt: c.confirmedAt,
-      village: c.village,
-      reportedBy: c.reportedBy,
-      assignedTo: c.assignedTo,
-      villageName: c.village?.name || 'Unknown',
-      villagerName: c.reportedBy?.name || 'Villager',
-      operator: c.assignedTo?.name || 'Unassigned',
-      submittedDate: c.createdAt,
-      updatedDate: c.updatedAt
-    });
-
     res.json({
       success: true,
       data: complaints.map(mapComplaint),
@@ -93,27 +177,6 @@ const getComplaintById = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Not authorized to view this complaint' });
     }
 
-    const mapComplaint = (c) => ({
-      _id: c._id,
-      id: c._id.toString(),
-      complaintId: c._id.toString(),
-      title: c.title,
-      description: c.description,
-      status: c.status,
-      createdAt: c.createdAt,
-      updatedAt: c.updatedAt,
-      resolvedAt: c.resolvedAt,
-      confirmedAt: c.confirmedAt,
-      village: c.village,
-      reportedBy: c.reportedBy,
-      assignedTo: c.assignedTo,
-      villageName: c.village?.name || 'Unknown',
-      villagerName: c.reportedBy?.name || 'Villager',
-      operator: c.assignedTo?.name || 'Unassigned',
-      submittedDate: c.createdAt,
-      updatedDate: c.updatedAt
-    });
-
     res.json({ success: true, data: mapComplaint(complaint) });
   } catch (error) {
     next(error);
@@ -135,6 +198,12 @@ const createComplaint = async (req, res, next) => {
       status: 'Submitted'
     });
 
+    await complaint.populate([
+      { path: 'village', select: 'name villageId' },
+      { path: 'reportedBy', select: 'name phone userId' },
+      { path: 'assignedTo', select: 'name phone userId' }
+    ]);
+
     await createAuditLog({
       userId: req.user._id,
       userName: req.user.name,
@@ -147,7 +216,7 @@ const createComplaint = async (req, res, next) => {
       relatedRecordId: complaint._id.toString()
     });
 
-    res.status(201).json({ success: true, data: complaint });
+    res.status(201).json({ success: true, data: mapComplaint(complaint) });
   } catch (error) {
     next(error);
   }
@@ -163,7 +232,10 @@ const updateComplaint = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Complaint not found' });
     }
 
-    complaint = await Complaint.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    complaint = await Complaint.findByIdAndUpdate(req.params.id, req.body, { new: true })
+      .populate('village', 'name villageId')
+      .populate('reportedBy', 'name phone userId')
+      .populate('assignedTo', 'name phone userId');
 
     await createAuditLog({
       userId: req.user._id,
@@ -176,7 +248,7 @@ const updateComplaint = async (req, res, next) => {
       relatedRecordId: complaint._id.toString()
     });
 
-    res.json({ success: true, data: complaint });
+    res.json({ success: true, data: mapComplaint(complaint) });
   } catch (error) {
     next(error);
   }
@@ -200,8 +272,17 @@ const updateComplaintStatus = async (req, res, next) => {
     } else if (status === 'Confirmed') {
       complaint.confirmedAt = new Date();
     }
+    if (remarks !== undefined) {
+      complaint.remarks = remarks;
+    }
 
     await complaint.save();
+
+    await complaint.populate([
+      { path: 'village', select: 'name villageId' },
+      { path: 'reportedBy', select: 'name phone userId' },
+      { path: 'assignedTo', select: 'name phone userId' }
+    ]);
 
     await createAuditLog({
       userId: req.user._id,
@@ -214,7 +295,7 @@ const updateComplaintStatus = async (req, res, next) => {
       relatedRecordId: complaint._id.toString()
     });
 
-    res.json({ success: true, data: complaint });
+    res.json({ success: true, data: mapComplaint(complaint) });
   } catch (error) {
     next(error);
   }

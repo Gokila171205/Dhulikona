@@ -113,21 +113,26 @@ const Complaints = () => {
       const paginationData = complaintsRes.pagination || { page: 1, totalPages: 1, total: resData.length };
 
       const mapped = resData.map(c => ({
-        id: c._id.toString(),
-        subject: c.title,
-        description: c.description,
-        village: c.village?.name || 'Unknown',
+        id: c._id ? c._id.toString() : 'Unknown ID',
+        subject: c.title || 'Untitled Complaint',
+        description: c.description || 'Not specified',
+        location: c.location || 'Not specified',
+        date: c.date ? new Date(c.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not specified',
+        village: c.village?.name || 'Village unavailable',
         villageId: c.village?._id || '',
-        villagerName: c.reportedBy?.name || 'Villager',
-        villagerPhone: c.reportedBy?.phone || '',
-        assignedOperator: c.assignedTo?.name || 'Unassigned',
+        villagerName: c.reportedBy?.name || 'Reporter unavailable',
+        villagerPhone: c.reportedBy?.phone || 'Not recorded',
+        assignedOperator: c.assignedTo ? (c.assignedTo.name || 'Operator unavailable') : 'Unassigned',
         operatorId: c.assignedTo?._id || '',
-        status: mapBackendStatus(c.status),
+        status: c.status || 'Submitted',
         submittedDate: c.createdAt ? formatDateTime(c.createdAt) : '',
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         resolvedAt: c.resolvedAt,
-        confirmedAt: c.confirmedAt
+        confirmedAt: c.confirmedAt,
+        resolutionRemarks: c.resolutionRemarks || c.remarks || 'Not specified',
+        category: c.category || 'Not specified',
+        priority: c.priority || 'Not specified'
       }));
       setComplaints(mapped);
       setTotalPages(paginationData.totalPages);
@@ -236,18 +241,38 @@ const Complaints = () => {
 
   const getStatusBadgeVariant = (status) => {
     switch (status) {
-      case 'New': return 'primary';
-      case 'In Progress': return 'warning';
-      case 'Resolved': return 'success';
-      case 'Closed': return 'default';
-      case 'Reopened': return 'danger';
-      default: return 'default';
+      case 'Submitted':
+      case 'Pending':
+      case 'New':
+        return 'primary';
+      case 'Verified':
+        return 'info';
+      case 'Maintenance Started':
+      case 'In Progress':
+        return 'warning';
+      case 'Resolved':
+        return 'success';
+      case 'Confirmed':
+      case 'Closed':
+        return 'default';
+      case 'Reopened':
+        return 'danger';
+      default:
+        return 'default';
     }
   };
 
   const columns = [
-    { header: 'ID', accessor: 'id' },
     { header: 'Date', accessor: 'submittedDate' },
+    { 
+      header: 'Complaint', 
+      render: (row) => (
+        <div className="flex flex-col gap-0.5 max-w-[280px]">
+          <span className="font-semibold text-gray-900 line-clamp-1">{row.subject || 'Untitled Complaint'}</span>
+          <span className="text-xs text-gray-500 line-clamp-2">{row.description}</span>
+        </div>
+      )
+    },
     { header: 'Villager', accessor: 'villagerName' },
     { header: 'Village', accessor: 'village' },
     { header: 'Operator', accessor: 'assignedOperator' },
@@ -577,12 +602,34 @@ const Complaints = () => {
                     <span className="font-medium text-gov-blue">{selectedComplaint.assignedOperator}</span>
                   </div>
                   <div className="flex flex-col border-b border-dashed pb-1">
+                    <span className="text-gray-500 mb-1">Category</span>
+                    <span className="font-medium text-gray-900">{selectedComplaint.category || 'Not specified'}</span>
+                  </div>
+                  <div className="flex flex-col border-b border-dashed pb-1">
+                    <span className="text-gray-500 mb-1">Priority</span>
+                    <span className="font-medium text-gray-900">{selectedComplaint.priority || 'Not specified'}</span>
+                  </div>
+                  <div className="flex flex-col border-b border-dashed pb-1">
+                    <span className="text-gray-500 mb-1">Location</span>
+                    <span className="font-medium text-gray-900">{selectedComplaint.location || 'Not specified'}</span>
+                  </div>
+                  <div className="flex flex-col border-b border-dashed pb-1">
+                    <span className="text-gray-500 mb-1">Incident Date</span>
+                    <span className="font-medium text-gray-900">{selectedComplaint.date || 'Not specified'}</span>
+                  </div>
+                  <div className="flex flex-col border-b border-dashed pb-1">
+                    <span className="text-gray-500 mb-1">Submitted Date</span>
+                    <span className="font-medium text-gray-900">{selectedComplaint.submittedDate || 'N/A'}</span>
+                  </div>
+                  <div className="flex flex-col border-b border-dashed pb-1">
                     <span className="text-gray-500 mb-1">Updated Date</span>
                     <span className="font-medium text-gray-900">{selectedComplaint.updatedAt ? formatDateTime(selectedComplaint.updatedAt) : 'N/A'}</span>
                   </div>
                 </div>
 
-                {(selectedComplaint.status === 'Resolved' || selectedComplaint.status === 'Closed') && selectedComplaint.resolutionRemarks && (
+                {(selectedComplaint.status === 'Resolved' || selectedComplaint.status === 'Closed') && 
+                 selectedComplaint.resolutionRemarks && 
+                 selectedComplaint.resolutionRemarks !== 'Not specified' && (
                   <div className="border-t border-gray-100 pt-4">
                     <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-1"><MessageSquare size={16} /> Resolution Remarks</h4>
                     <p className="text-sm text-gray-700 bg-green-50 border border-green-100 p-3 rounded">{selectedComplaint.resolutionRemarks}</p>

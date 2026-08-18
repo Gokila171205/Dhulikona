@@ -77,6 +77,11 @@ const createWaterSupply = async (req, res, next) => {
       remarks
     });
 
+    await record.populate([
+      { path: 'village', select: 'name villageId' },
+      { path: 'recordedBy', select: 'name phone userId' }
+    ]);
+
     await createAuditLog({
       userId: req.user._id,
       userName: req.user.name,
@@ -104,7 +109,9 @@ const updateWaterSupply = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Record not found' });
     }
 
-    record = await WaterSupply.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    record = await WaterSupply.findByIdAndUpdate(req.params.id, req.body, { new: true })
+      .populate('village', 'name villageId')
+      .populate('recordedBy', 'name phone userId');
 
     await createAuditLog({
       userId: req.user._id,

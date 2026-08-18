@@ -53,18 +53,20 @@ const WaterSupply = () => {
       ]);
       setVillages(villagesRes.data);
       const mapped = supplyRes.data.map(r => ({
-        id: r._id.toString(),
-        village: r.village?.name || 'Unknown',
+        id: r._id ? r._id.toString() : 'Unknown ID',
+        village: r.village?.name || r.area || 'Unassigned / Missing',
         villageId: r.village?._id || '',
-        supplyDate: r.supplyDate,
-        scheduledStart: r.scheduledStart,
-        scheduledEnd: r.scheduledEnd,
-        actualStart: r.actualStart,
-        actualEnd: r.actualEnd,
-        frequency: r.frequency,
-        status: r.status,
+        supplyDate: r.supplyDate || r.date || 'Not recorded',
+        scheduledStart: r.scheduledStart || r.startTime || 'Not recorded',
+        scheduledEnd: r.scheduledEnd || r.endTime || 'Not recorded',
+        actualStart: r.actualStart || 'Not recorded',
+        actualEnd: r.actualEnd || 'Not recorded',
+        frequency: r.frequency || 'Not recorded',
+        status: r.status || 'Not recorded',
         remarks: r.remarks || '',
-        recordedBy: r.recordedBy?.name || 'Operator'
+        recordedBy: r.recordedBy?.name || 'Not recorded',
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt
       }));
       setSupplyRecords(mapped);
       setError(null);
@@ -86,7 +88,7 @@ const WaterSupply = () => {
       r.village.toLowerCase().includes(searchLower) || 
       r.id.toLowerCase().includes(searchLower);
     
-    const matchesVillage = villageFilter ? r.village === villageFilter : true;
+    const matchesVillage = villageFilter ? r.villageId === villageFilter : true;
     const matchesDate = dateFilter ? r.supplyDate === dateFilter : true;
     const matchesStatus = statusFilter ? r.status === statusFilter : true;
     const matchesFrequency = frequencyFilter ? r.frequency === frequencyFilter : true;
@@ -143,7 +145,7 @@ const WaterSupply = () => {
   const handleOpenEditModal = (record) => {
     setSelectedRecord(record);
     setFormData({ 
-      village: record.village, 
+      village: record.villageId, 
       supplyDate: record.supplyDate, 
       scheduledStart: record.scheduledStart, 
       scheduledEnd: record.scheduledEnd, 
@@ -165,11 +167,10 @@ const WaterSupply = () => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      const vDoc = villages.find(v => v.name === formData.village);
-      if (!vDoc) throw new Error('Selected village name is invalid.');
+      if (!formData.village) throw new Error('Please select a village.');
 
       const payload = {
-        village: vDoc._id,
+        village: formData.village,
         supplyDate: formData.supplyDate,
         scheduledStart: formData.scheduledStart,
         scheduledEnd: formData.scheduledEnd,
@@ -205,10 +206,16 @@ const WaterSupply = () => {
   };
 
   const calculateDuration = (start, end) => {
-    if (!start || !end || start === '-' || end === '-') return '-';
+    if (!start || !end || start === '-' || end === '-' || start === 'Not recorded' || end === 'Not recorded') return '-';
     try {
-      const [sh, sm] = start.split(':').map(Number);
-      const [eh, em] = end.split(':').map(Number);
+      const sParts = start.split(':');
+      const eParts = end.split(':');
+      if (sParts.length !== 2 || eParts.length !== 2) return '-';
+      const sh = Number(sParts[0]);
+      const sm = Number(sParts[1]);
+      const eh = Number(eParts[0]);
+      const em = Number(eParts[1]);
+      if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return '-';
       let diff = (eh * 60 + em) - (sh * 60 + sm);
       if (diff < 0) diff += 24 * 60; // handle crossing midnight
       const h = Math.floor(diff / 60);
@@ -225,11 +232,21 @@ const WaterSupply = () => {
     { header: 'Date', accessor: 'supplyDate' },
     { 
       header: 'Scheduled', 
-      render: (row) => `${row.scheduledStart} - ${row.scheduledEnd}` 
+      render: (row) => {
+        if (row.scheduledStart === 'Not recorded' && row.scheduledEnd === 'Not recorded') {
+          return 'Not recorded';
+        }
+        return `${row.scheduledStart} - ${row.scheduledEnd}`;
+      }
     },
     { 
       header: 'Actual', 
-      render: (row) => `${row.actualStart} - ${row.actualEnd}` 
+      render: (row) => {
+        if ((row.actualStart === 'Not recorded' && row.actualEnd === 'Not recorded') || (row.actualStart === '-' && row.actualEnd === '-')) {
+          return 'Not recorded';
+        }
+        return `${row.actualStart} - ${row.actualEnd}`;
+      }
     },
     { header: 'Freq.', accessor: 'frequency' },
     { 
@@ -363,7 +380,7 @@ const WaterSupply = () => {
           <Select
             options={[
               { label: 'All Villages', value: '' },
-              ...villages.map(v => ({ label: v.name, value: v.name }))
+              ...villages.map(v => ({ label: v.name, value: v._id }))
             ]}
             value={villageFilter}
             onChange={(e) => setVillageFilter(e.target.value)}
@@ -425,7 +442,7 @@ const WaterSupply = () => {
               required
               options={[
                 { label: 'Select Village...', value: '' },
-                ...villages.map(v => ({ label: v.name, value: v.name }))
+                ...villages.map(v => ({ label: v.name, value: v._id }))
               ]}
               value={formData.village}
               onChange={(e) => setFormData({...formData, village: e.target.value})}
@@ -566,14 +583,78 @@ const WaterSupply = () => {
 
             {/* Detailed Info */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-sm border-t border-gray-100 pt-4">
-              <div className="flex justify-between border-b border-dashed pb-1">
-                <span className="text-gray-500">Recorded By</span>
-                <span className="font-medium text-gov-blue">{selectedRecord.recordedBy}</span>
-              </div>
-              <div className="flex justify-between border-b border-dashed pb-1">
-                <span className="text-gray-500">Last Updated</span>
-                <span className="font-medium text-gray-600">{new Date(selectedRecord.lastUpdated).toLocaleString()}</span>
-              </div>
+              {selectedRecord.id && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Record ID</span>
+                  <span className="font-medium text-gray-800">{selectedRecord.id}</span>
+                </div>
+              )}
+              {selectedRecord.village && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Village</span>
+                  <span className="font-medium text-gray-800">{selectedRecord.village}</span>
+                </div>
+              )}
+              {selectedRecord.supplyDate && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Date</span>
+                  <span className="font-medium text-gray-800">{selectedRecord.supplyDate}</span>
+                </div>
+              )}
+              {selectedRecord.scheduledStart && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Scheduled Start</span>
+                  <span className="font-medium text-gray-800">{selectedRecord.scheduledStart}</span>
+                </div>
+              )}
+              {selectedRecord.scheduledEnd && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Scheduled End</span>
+                  <span className="font-medium text-gray-800">{selectedRecord.scheduledEnd}</span>
+                </div>
+              )}
+              {selectedRecord.actualStart && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Actual Start</span>
+                  <span className="font-medium text-gray-800">{selectedRecord.actualStart}</span>
+                </div>
+              )}
+              {selectedRecord.actualEnd && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Actual End</span>
+                  <span className="font-medium text-gray-800">{selectedRecord.actualEnd}</span>
+                </div>
+              )}
+              {selectedRecord.frequency && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Frequency</span>
+                  <span className="font-medium text-gray-800">{selectedRecord.frequency}</span>
+                </div>
+              )}
+              {selectedRecord.status && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Status</span>
+                  <span className="font-medium text-gray-800">{selectedRecord.status}</span>
+                </div>
+              )}
+              {selectedRecord.recordedBy && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Recorded By</span>
+                  <span className="font-medium text-gov-blue">{selectedRecord.recordedBy}</span>
+                </div>
+              )}
+              {selectedRecord.createdAt && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Created At</span>
+                  <span className="font-medium text-gray-600">{new Date(selectedRecord.createdAt).toLocaleString()}</span>
+                </div>
+              )}
+              {selectedRecord.updatedAt && (
+                <div className="flex justify-between border-b border-dashed pb-1">
+                  <span className="text-gray-500">Updated At</span>
+                  <span className="font-medium text-gray-600">{new Date(selectedRecord.updatedAt).toLocaleString()}</span>
+                </div>
+              )}
               <div className="col-span-2 mt-2">
                 <span className="text-gray-500 block mb-1">Remarks</span>
                 <div className="bg-gray-50 p-3 rounded text-gray-700 border border-gray-200 min-h-[3rem]">
