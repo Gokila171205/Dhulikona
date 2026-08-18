@@ -2,18 +2,30 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import DashboardLayout from '../components/layout/DashboardLayout';
 
+// Login
+import Login from '../pages/auth/Login';
+
 // Operator Pages
 import OperatorDashboard from '../pages/Operator/Dashboard';
 import OperatorPumps from '../pages/Operator/Pumps';
-import WaterSupply from '../pages/Operator/WaterSupply';
-import WaterQuality from '../pages/Operator/WaterQuality';
+import OperatorWaterSupply from '../pages/Operator/WaterSupply';
+import OperatorWaterQuality from '../pages/Operator/WaterQuality';
 import Complaints from '../pages/Operator/Complaints';
 import Maintenance from '../pages/Operator/Maintenance';
 import Charges from '../pages/Operator/Charges';
-import OperatorLogin from '../pages/Operator/OperatorLogin';
 
 // Admin Pages
 import AdminDashboard from '../pages/admin/Dashboard';
+
+// Villager Pages
+import VillagerDashboard from '../pages/villager/VillagerDashboard';
+import VillagerWaterSupply from '../pages/villager/WaterSupply';
+import ReportProblem from '../pages/villager/ReportProblem';
+import MyComplaints from '../pages/villager/MyComplaints';
+import ComplaintDetails from '../pages/villager/ComplaintDetails';
+import VillagerWaterQuality from '../pages/villager/WaterQuality';
+import PaymentStatus from '../pages/villager/PaymentStatus';
+import Notifications from '../pages/villager/Notifications';
 
 // Placeholder
 const Placeholder = ({ title }) => (
@@ -28,23 +40,19 @@ const AppRoutes = () => {
   return (
     <Routes>
 
-      {/* Default Route */}
+      {/* ================= DEFAULT ROUTE ================= */}
       <Route
         path="/"
-        element={<Navigate to="/admin" replace />}
+        element={<Navigate to="/login" replace />}
       />
 
-      {/* =========================
-          OPERATOR LOGIN
-      ========================== */}
+      {/* ================= LOGIN ================= */}
       <Route
-        path="/operator/login"
-        element={<OperatorLogin />}
+        path="/login"
+        element={<Login />}
       />
 
-      {/* =========================
-          ADMIN ROUTES
-      ========================== */}
+      {/* ================= ADMIN ROUTES ================= */}
       <Route
         path="/admin"
         element={<DashboardLayout role="ADMIN" />}
@@ -115,9 +123,7 @@ const AppRoutes = () => {
         />
       </Route>
 
-      {/* =========================
-          OPERATOR ROUTES
-      ========================== */}
+      {/* ================= OPERATOR ROUTES ================= */}
       <Route
         path="/operator"
         element={<DashboardLayout role="OPERATOR" />}
@@ -134,12 +140,12 @@ const AppRoutes = () => {
 
         <Route
           path="water-supply"
-          element={<WaterSupply />}
+          element={<OperatorWaterSupply />}
         />
 
         <Route
           path="water-quality"
-          element={<WaterQuality />}
+          element={<OperatorWaterQuality />}
         />
 
         <Route
@@ -158,26 +164,65 @@ const AppRoutes = () => {
         />
       </Route>
 
-      {/* =========================
-          VILLAGER ROUTES
-      ========================== */}
+      {/* ================= VILLAGER ROUTES ================= */}
       <Route
         path="/villager"
         element={<DashboardLayout role="VILLAGER" />}
       >
+        {/* Dashboard */}
         <Route
           index
-          element={<Placeholder title="Villager Dashboard" />}
+          element={<VillagerDashboard />}
+        />
+
+        {/* Water Supply */}
+        <Route
+          path="water-supply"
+          element={<VillagerWaterSupply />}
+        />
+
+        {/* Report Problem */}
+        <Route
+          path="report-problem"
+          element={<ReportProblem />}
+        />
+
+        {/* My Complaints */}
+        <Route
+          path="complaints"
+          element={<MyComplaints />}
+        />
+
+        {/* Complaint Details */}
+        <Route
+          path="complaints/:id"
+          element={<ComplaintDetails />}
+        />
+
+        {/* Water Quality */}
+        <Route
+          path="water-quality"
+          element={<VillagerWaterQuality />}
+        />
+
+        {/* Payment Status */}
+        <Route
+          path="payments"
+          element={<PaymentStatus />}
+        />
+
+        {/* Notifications */}
+        <Route
+          path="notifications"
+          element={<Notifications />}
         />
       </Route>
 
-      {/* =========================
-          404
-      ========================== */}
+      {/* ================= 404 ================= */}
       <Route
         path="*"
         element={
-          <div className="p-8 text-center text-xl text-red-500">
+          <div className="p-8 text-center text-red-500 text-xl">
             Page Not Found
           </div>
         }

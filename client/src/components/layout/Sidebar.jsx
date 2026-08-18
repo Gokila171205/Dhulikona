@@ -45,8 +45,14 @@ const Sidebar = ({ isOpen, role = 'ADMIN' }) => {
   { name: 'Charges', path: '/operator/charges', icon: CreditCard },
 ],
     VILLAGER: [
-      { name: 'Dashboard', path: '/villager', icon: LayoutDashboard },
-    ]
+  { name: 'Dashboard', path: '/villager', icon: LayoutDashboard },
+  { name: 'Water Supply', path: '/villager/water-supply', icon: Droplet },
+  { name: 'Report Problem', path: '/villager/report-problem', icon: FileWarning },
+  { name: 'My Complaints', path: '/villager/complaints', icon: FileText },
+  { name: 'Water Quality', path: '/villager/water-quality', icon: Activity },
+  { name: 'Payment Status', path: '/villager/payments', icon: CreditCard },
+  { name: 'Notifications', path: '/villager/notifications', icon: Bell },
+]
   };
 
   const links = navigation[role] || [];
