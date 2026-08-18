@@ -61,10 +61,10 @@ const Maintenance = () => {
     try {
       setLoading(true);
       const [mntRes, villagesRes, operatorsRes, pumpsRes] = await Promise.all([
-        api.get('/maintenance?limit=100'),
+        api.get('/admin/maintenance?limit=100'),
         api.get('/villages?limit=100'),
         api.get('/users?role=operator&limit=100'),
-        api.get('/pumps?limit=100')
+        api.get('/admin/pumps?limit=100')
       ]);
       setVillages(villagesRes.data);
       setOperators(operatorsRes.data);

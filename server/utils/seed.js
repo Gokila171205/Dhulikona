@@ -47,6 +47,16 @@ const importData = async () => {
 
     console.log('Existing collections successfully cleared.');
 
+    // Drop old indexes to prevent conflicts with schema migration
+    try {
+      await User.collection.dropIndex('phone_1');
+      console.log('Dropped old phone_1 index from User collection');
+    } catch (err) {
+      if (err.code !== 27) { // 27 = index not found (expected for new collections)
+        console.log('Note: phone_1 index already dropped or does not exist');
+      }
+    }
+
     const salt = await bcrypt.genSalt(10);
     const password = await bcrypt.hash('123456', salt);
 
@@ -54,7 +64,7 @@ const importData = async () => {
     const admin = await User.create({
       userId: 'U-ADMIN-001',
       name: 'System Admin',
-      phone: '9999999999',
+      email: 'admin@jaltrack.com',
       password,
       role: 'admin',
       status: 'active'
@@ -64,7 +74,7 @@ const importData = async () => {
     const operator1 = await User.create({
       userId: 'U-OP-001',
       name: 'Ramesh Kumar',
-      phone: '9876543210',
+      email: 'ramesh.kumar@jaltrack.com',
       password,
       role: 'operator',
       status: 'active'
@@ -73,7 +83,7 @@ const importData = async () => {
     const operator2 = await User.create({
       userId: 'U-OP-002',
       name: 'Suresh Das',
-      phone: '8765432109',
+      email: 'suresh.das@jaltrack.com',
       password,
       role: 'operator',
       status: 'active'
@@ -121,7 +131,7 @@ const importData = async () => {
     const villager1 = await User.create({
       userId: 'U-VIL-001',
       name: 'Bina Das',
-      phone: '7654321098',
+      email: 'bina.das@jaltrack.com',
       password,
       role: 'villager',
       village: village1._id,
@@ -131,7 +141,7 @@ const importData = async () => {
     const villager2 = await User.create({
       userId: 'U-VIL-002',
       name: 'Jadu Nath',
-      phone: '6543210987',
+      email: 'jadu.nath@jaltrack.com',
       password,
       role: 'villager',
       village: village2._id,
@@ -141,7 +151,7 @@ const importData = async () => {
     const villager3 = await User.create({
       userId: 'U-VIL-003',
       name: 'Priya Kalita',
-      phone: '8765400112',
+      email: 'priya.kalita@jaltrack.com',
       password,
       role: 'villager',
       village: village1._id,
@@ -270,6 +280,9 @@ const importData = async () => {
 
     // 9. Create Water Quality Tests
     await WaterQuality.create({
+      date: '2026-08-12',
+      location: 'Village 1 - Main Pump Station',
+      pump: pump2.name,
       village: village1._id,
       testDate: '2026-08-12',
       ph: 7.2,
@@ -282,6 +295,9 @@ const importData = async () => {
     });
 
     await WaterQuality.create({
+      date: '2026-08-12',
+      location: 'Village 2 - Central Station',
+      pump: 'Raha Water Station',
       village: village2._id,
       testDate: '2026-08-12',
       ph: 6.2,
@@ -342,12 +358,13 @@ const importData = async () => {
     });
 
     console.log('Seeding completed successfully!');
-    console.log('Demonstration Credentials:');
-    console.log('- Admin: 9999999999 / 123456');
-    console.log('- Operator 1: 9876543210 / 123456 (Sonapur/Baihata)');
-    console.log('- Operator 2: 8765432109 / 123456 (Raha)');
-    console.log('- Villager 1: 7654321098 / 123456 (Sonapur)');
-    console.log('- Villager 2: 6543210987 / 123456 (Raha)');
+    console.log('Demonstration Credentials (Email + Password):');
+    console.log('- Admin: admin@jaltrack.com / 123456');
+    console.log('- Operator 1: ramesh.kumar@jaltrack.com / 123456 (Sonapur/Baihata)');
+    console.log('- Operator 2: suresh.das@jaltrack.com / 123456 (Raha)');
+    console.log('- Villager 1: bina.das@jaltrack.com / 123456 (Sonapur)');
+    console.log('- Villager 2: jadu.nath@jaltrack.com / 123456 (Raha)');
+    console.log('- Villager 3: priya.kalita@jaltrack.com / 123456 (Sonapur)');
 
     process.exit(0);
   } catch (error) {

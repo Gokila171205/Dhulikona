@@ -16,15 +16,15 @@ const generateToken = (id) => {
 // @access  Public
 const loginUser = async (req, res, next) => {
   try {
-    const { phone, password } = req.body;
+    const { email, password } = req.body;
 
     // Validate inputs
-    if (!phone || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide phone and password' });
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Please provide email and password' });
     }
 
     // Check for user
-    const user = await User.findOne({ phone }).populate('village', 'name');
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).populate('village', 'name');
 
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -72,7 +72,7 @@ const loginUser = async (req, res, next) => {
           userId: user.userId,
           name: user.name,
           role: user.role,
-          phone: user.phone,
+          email: user.email,
           village: user.village ? user.village._id : null,
           villageName: user.village ? user.village.name : null,
           status: user.status
@@ -89,17 +89,17 @@ const loginUser = async (req, res, next) => {
 // @access  Public
 const signupUser = async (req, res, next) => {
   try {
-    const { name, phone, password, village } = req.body;
+    const { name, email, password, village } = req.body;
 
     // Validate inputs
-    if (!name || !phone || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide name, phone and password' });
+    if (!name || !email || !password) {
+      return res.status(400).json({ success: false, message: 'Please provide name, email and password' });
     }
 
     // Check if user already exists
-    const userExists = await User.findOne({ phone });
+    const userExists = await User.findOne({ email: email.toLowerCase().trim() });
     if (userExists) {
-      return res.status(400).json({ success: false, message: 'User with this phone number already exists' });
+      return res.status(400).json({ success: false, message: 'User with this email address already exists' });
     }
 
     // Generate unique userId
@@ -122,7 +122,7 @@ const signupUser = async (req, res, next) => {
     const user = await User.create({
       userId,
       name,
-      phone,
+      email: email.toLowerCase().trim(),
       password: hashedPassword,
       role: 'villager',
       village: village || null,
@@ -155,7 +155,7 @@ const signupUser = async (req, res, next) => {
           userId: user.userId,
           name: user.name,
           role: user.role,
-          phone: user.phone,
+          email: user.email,
           village: user.village ? user.village : null,
           villageName: populatedUser.village ? populatedUser.village.name : null,
           status: user.status

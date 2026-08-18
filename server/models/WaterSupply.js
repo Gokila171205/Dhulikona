@@ -1,20 +1,68 @@
 const mongoose = require('mongoose');
 
-const waterSupplySchema = new mongoose.Schema({
-  village: { type: mongoose.Schema.Types.ObjectId, ref: 'Village', required: true },
-  supplyDate: { type: String, required: true }, // e.g., '2026-08-12'
-  scheduledStart: { type: String, required: true }, // e.g., '16:00'
-  scheduledEnd: { type: String, required: true }, // e.g., '18:00'
-  actualStart: { type: String, default: '-' },
-  actualEnd: { type: String, default: '-' },
-  frequency: { type: String, default: 'Daily' },
-  status: { 
-    type: String, 
-    enum: ['Scheduled', 'Completed', 'Missed', 'Cancelled'],
-    default: 'Scheduled'
+const waterSupplySchema = new mongoose.Schema(
+  {
+    // Village this water supply record belongs to
+    village: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Village',
+      required: true
+    },
+
+    // Date of water supply
+    supplyDate: {
+      type: String,
+      required: true
+    },
+
+    // Scheduled supply time
+    scheduledStart: {
+      type: String,
+      required: true
+    },
+
+    scheduledEnd: {
+      type: String,
+      required: true
+    },
+
+    // Actual supply time
+    actualStart: {
+      type: String,
+      default: '-'
+    },
+
+    actualEnd: {
+      type: String,
+      default: '-'
+    },
+
+    // Frequency of water supply
+    frequency: {
+      type: String,
+      default: 'Daily'
+    },
+
+    status: {
+      type: String,
+      enum: ['Scheduled', 'Completed', 'Missed', 'Cancelled'],
+      default: 'Scheduled'
+    },
+
+    // User who recorded the supply
+    recordedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+
+    remarks: {
+      type: String,
+      default: ''
+    }
   },
-  recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  remarks: { type: String, default: '' }
-}, { timestamps: true });
+  {
+    timestamps: true
+  }
+);
 
 module.exports = mongoose.model('WaterSupply', waterSupplySchema);
