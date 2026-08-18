@@ -39,9 +39,20 @@ const AdminDashboard = () => {
         setLoading(true);
         setError(null);
         const res = await api.get('/analytics/dashboard');
-        setAnalytics(res.data);
+        console.log('Analytics response:', res);
+        
+        // The API interceptor returns response.data directly, which has structure: { success: true, data: {...} }
+        // So we need to extract the actual analytics data
+        const analyticsData = res?.data ? res.data : (res?.success ? res : null);
+        
+        if (!analyticsData) {
+          throw new Error('Invalid analytics response structure');
+        }
+        
+        setAnalytics(analyticsData);
       } catch (err) {
-        setError('Unable to load dashboard statistics.');
+        console.error('Analytics fetch error:', err);
+        setError(err.response?.data?.message || err.message || 'Unable to load dashboard statistics.');
       } finally {
         setLoading(false);
       }
@@ -55,8 +66,11 @@ const AdminDashboard = () => {
         setComplaintsLoading(true);
         setComplaintsError(null);
         const res = await api.get('/complaints', { params: { limit: 5 } });
-        setRecentComplaints(res.data);
+        // Handle both response formats
+        const complaintsData = res?.data ? res.data : res;
+        setRecentComplaints(Array.isArray(complaintsData) ? complaintsData : []);
       } catch (err) {
+        console.error('Complaints error:', err);
         setComplaintsError('Unable to load recent complaints.');
       } finally {
         setComplaintsLoading(false);

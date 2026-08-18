@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import {
   Droplets,
   User,
   ShieldCheck,
   HardHat,
   Lock,
-  Mail
+  Mail,
 } from 'lucide-react';
-
-import { useAuth } from '../../context/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -46,35 +45,36 @@ const Login = () => {
     e.preventDefault();
     setError('');
 
-    if (!email || !password) {
-      setError('Please enter your email and password.');
+    if (!email.trim() || !password.trim()) {
+      setError('Email and password are required');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      /*
-       * AuthContext currently expects phone/password.
-       * If your backend login API uses email instead, change
-       * this to login(email, password).
-       */
-      const user = await login(email, password);
+      const user = await login(email.trim(), password);
 
-      const userRole = String(user.role || '').toLowerCase();
+      console.log('Logged in user:', user);
+
+      const userRole = user?.role?.toLowerCase();
 
       if (userRole === 'admin') {
         navigate('/admin');
       } else if (userRole === 'operator') {
         navigate('/operator');
-      } else {
+      } else if (userRole === 'villager') {
         navigate('/villager');
+      } else {
+        setError('Invalid user role');
       }
     } catch (err) {
+      console.error('Login error:', err);
+
       setError(
         err.response?.data?.message ||
         err.message ||
-        'Failed to connect to server.'
+        'Login failed. Please check your email and password.'
       );
     } finally {
       setIsLoading(false);
@@ -233,7 +233,7 @@ const Login = () => {
 
                 <form onSubmit={handleLogin} className="space-y-5">
 
-                  {/* Email / Login ID */}
+                  {/* Email */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Email Address
@@ -247,12 +247,13 @@ const Login = () => {
                       />
 
                       <input
-                        type="text"
+                        type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        placeholder="Enter your email"
-                        disabled={isLoading}
+                        placeholder="Enter your email address"
+                        autoComplete="email"
                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-water-blue/30 focus:border-water-blue"
+                        disabled={isLoading}
                       />
 
                     </div>
@@ -276,8 +277,9 @@ const Login = () => {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Enter your password"
-                        disabled={isLoading}
+                        autoComplete="current-password"
                         className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-water-blue/30 focus:border-water-blue"
+                        disabled={isLoading}
                       />
 
                     </div>
@@ -294,9 +296,9 @@ const Login = () => {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full bg-water-blue hover:bg-gov-light disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors shadow-sm"
+                    className="w-full bg-water-blue hover:bg-gov-light disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors shadow-sm"
                   >
-                    {isLoading ? 'Signing in...' : 'Sign In'}
+                    {isLoading ? 'Signing In...' : 'Sign In'}
                   </button>
 
                 </form>

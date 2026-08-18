@@ -5,49 +5,50 @@ const userSchema = new mongoose.Schema(
     userId: {
       type: String,
       required: true,
-      unique: true
+      unique: true,
     },
 
     name: {
       type: String,
-      required: true
+      required: true,
     },
 
-    phone: {
+    email: {
       type: String,
       required: true,
-      unique: true
+      unique: true,
+      lowercase: true,
+      trim: true,
     },
 
     password: {
       type: String,
-      required: true
+      required: true,
     },
 
     role: {
       type: String,
       enum: ['villager', 'operator', 'admin'],
       default: 'villager',
-      required: true
+      required: true,
     },
 
     village: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Village'
+      ref: 'Village',
     },
 
     status: {
       type: String,
       enum: ['active', 'inactive'],
-      default: 'active'
-    }
+      default: 'active',
+    },
   },
   {
-    timestamps: true
+    timestamps: true,
   }
 );
 
-// Indexes
 userSchema.index({ role: 1 });
 userSchema.index({ village: 1 });
 userSchema.index({ status: 1 });

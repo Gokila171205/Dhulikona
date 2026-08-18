@@ -51,7 +51,7 @@ const WaterQuality = () => {
       setLoading(true);
       setOperatorLoading(true);
       const [qualityRes, villagesRes, operatorsRes] = await Promise.all([
-        api.get('/water-quality?limit=100'),
+        api.get('/admin/water-quality?limit=100'),
         api.get('/villages?limit=100'),
         api.get('/users?role=operator&limit=100')
       ]);

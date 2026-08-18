@@ -48,7 +48,7 @@ const WaterSupply = () => {
     try {
       setLoading(true);
       const [supplyRes, villagesRes] = await Promise.all([
-        api.get('/water-supply?limit=100'),
+        api.get('/admin/water-supply?limit=100'),
         api.get('/villages?limit=100')
       ]);
       setVillages(villagesRes.data);
