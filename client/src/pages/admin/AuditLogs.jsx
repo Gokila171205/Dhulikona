@@ -9,9 +9,10 @@ import Button from '../../components/ui/Button';
 import BarChart from '../../components/charts/BarChart';
 import { 
   FileText, Search, RefreshCw, Eye, ShieldCheck, Activity, User, 
-  MapPin, Clock, Info, CheckCircle, XCircle, ChevronDown, ArrowDown
+  MapPin, Clock, Info, CheckCircle, XCircle, ChevronDown, ArrowDown,
+  AlertTriangle
 } from 'lucide-react';
-import { roleOptions, moduleOptions, actionOptions, resultOptions, dateRangeOptions } from '../../data/mockAuditLogs';
+import { roleOptions, moduleOptions, actionOptions, resultOptions, dateRangeOptions } from '../../data/auditLogOptions';
 import api from '../../services/api';
 
 const AuditLogs = () => {
