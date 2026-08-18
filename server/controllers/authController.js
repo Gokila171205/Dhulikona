@@ -84,6 +84,90 @@ const loginUser = async (req, res, next) => {
   }
 };
 
+// @desc    Register new villager user
+// @route   POST /api/auth/signup
+// @access  Public
+const signupUser = async (req, res, next) => {
+  try {
+    const { name, phone, password, village } = req.body;
+
+    // Validate inputs
+    if (!name || !phone || !password) {
+      return res.status(400).json({ success: false, message: 'Please provide name, phone and password' });
+    }
+
+    // Check if user already exists
+    const userExists = await User.findOne({ phone });
+    if (userExists) {
+      return res.status(400).json({ success: false, message: 'User with this phone number already exists' });
+    }
+
+    // Generate unique userId
+    let userId;
+    let userIdExists = true;
+    while (userIdExists) {
+      const rand = Math.floor(1000 + Math.random() * 9000);
+      userId = `U-VIL-${rand}`;
+      const existing = await User.findOne({ userId });
+      if (!existing) {
+        userIdExists = false;
+      }
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create user with role 'villager' and status 'active'
+    const user = await User.create({
+      userId,
+      name,
+      phone,
+      password: hashedPassword,
+      role: 'villager',
+      village: village || null,
+      status: 'active'
+    });
+
+    // Populate village details if provided
+    let populatedUser = user;
+    if (village) {
+      populatedUser = await User.findById(user._id).populate('village', 'name');
+    }
+
+    // Audit Log for successful signup
+    await createAuditLog({
+      userId: user._id,
+      userName: user.name,
+      role: 'villager',
+      action: 'CREATE',
+      module: 'AUTHENTICATION',
+      description: `Villager user ${user.name} signed up successfully`,
+      result: 'SUCCESS',
+      village: populatedUser.village ? populatedUser.village.name : 'N/A'
+    });
+
+    res.status(201).json({
+      success: true,
+      data: {
+        token: generateToken(user._id),
+        user: {
+          userId: user.userId,
+          name: user.name,
+          role: user.role,
+          phone: user.phone,
+          village: user.village ? user.village : null,
+          villageName: populatedUser.village ? populatedUser.village.name : null,
+          status: user.status
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
-  loginUser
+  loginUser,
+  signupUser
 };
