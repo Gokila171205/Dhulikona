@@ -12,7 +12,10 @@ const complaintSchema = new mongoose.Schema({
     default: 'Submitted'
   },
   resolvedAt: { type: Date },
-  confirmedAt: { type: Date }
+  confirmedAt: { type: Date },
+  remarks: { type: String, default: '' },
+  location: { type: String },
+  date: { type: Date }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Complaint', complaintSchema);

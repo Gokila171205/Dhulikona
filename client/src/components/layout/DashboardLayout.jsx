@@ -11,7 +11,7 @@ const DashboardLayout = ({ role = 'ADMIN' }) => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background-default">
+    <div className="h-screen flex flex-col bg-background-default overflow-hidden">
       <Header toggleSidebar={toggleSidebar} />
       
       <div className="flex flex-1 overflow-hidden">
